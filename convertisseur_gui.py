@@ -3,19 +3,22 @@
 """
 convertisseur_gui.py — Interface graphique du convertisseur CAO/DAO par lot.
 
-Fenêtre simple (tkinter, livré avec Python) pour :
+Fenêtre tkinter (livré avec Python) pour :
   - choisir des fichiers via le gestionnaire de fichiers (multi-sélection) ;
-  - cocher les formats voulus selon le type (pièce/assemblage ou mise en plan) ;
+  - cocher les formats voulus selon la nature (Pièces / Assemblages /
+    Mises en plan), chaque nature ayant ses propres cases ;
+  - ajouter un préfixe et/ou un suffixe aux noms de fichiers ;
   - choisir la destination (à côté des fichiers, ou un dossier personnalisé) ;
-  - lancer la conversion et suivre le journal en direct.
+  - suivre l'avancement (barre + temps restant estimé) et le journal ;
+  - obtenir un bilan en fin de conversion (et la liste des échecs).
 
-La conversion tourne dans un thread séparé pour ne pas figer la fenêtre ;
-le pilotage COM y est initialisé (CoInitialize).
+La conversion tourne dans un thread séparé (avec CoInitialize pour COM).
 """
 
 import os
 import queue
 import threading
+import time
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -23,7 +26,6 @@ from tkinter import ttk, filedialog, messagebox
 import convertisseur_cao as engine
 
 
-# Extensions gérées, pour le filtre du sélecteur de fichiers
 _ALL_EXTS = sorted(engine.ROUTES.keys())
 _FILE_TYPES = [
     ("Fichiers CAO/DAO", " ".join("*" + e for e in _ALL_EXTS)),
@@ -35,6 +37,19 @@ _FILE_TYPES = [
 ]
 
 
+def _fmt_duration(seconds):
+    if seconds is None or seconds < 0:
+        return "—"
+    seconds = int(round(seconds))
+    m, s = divmod(seconds, 60)
+    if m >= 60:
+        h, m = divmod(m, 60)
+        return "%dh%02dm%02ds" % (h, m, s)
+    if m:
+        return "%dmin %02ds" % (m, s)
+    return "%ds" % s
+
+
 class App(ttk.Frame):
     def __init__(self, master):
         super().__init__(master, padding=10)
@@ -43,13 +58,17 @@ class App(ttk.Frame):
         master.columnconfigure(0, weight=1)
         master.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(6, weight=1)
 
-        self.files = []                 # liste des chemins ajoutés
-        self.format_vars = {}           # target -> tk.BooleanVar
-        self._queue = queue.Queue()     # messages du thread de conversion
+        self.files = []
+        # format_vars[kind][target] -> BooleanVar (STEP de « Pièces » et de
+        # « Assemblages » sont indépendants)
+        self.format_vars = {k: {} for k in engine.KIND_ORDER}
+        self.frames = {}
+        self._queue = queue.Queue()
         self._worker = None
         self._stop = False
+        self._start_time = None
+        self._total = 0
 
         self._build()
         self._poll_queue()
@@ -57,11 +76,9 @@ class App(ttk.Frame):
 
     # ------------------------------------------------------------------ UI
     def _build(self):
-        row = 0
-
-        # --- Fichiers -------------------------------------------------
+        r = 0
         bar = ttk.Frame(self)
-        bar.grid(row=row, column=0, sticky="ew")
+        bar.grid(row=r, column=0, sticky="ew")
         ttk.Button(bar, text="Ajouter des fichiers…",
                    command=self.add_files).pack(side="left")
         ttk.Button(bar, text="Ajouter un dossier…",
@@ -70,51 +87,67 @@ class App(ttk.Frame):
                    command=self.remove_selected).pack(side="left", padx=(6, 0))
         ttk.Button(bar, text="Vider la liste",
                    command=self.clear_files).pack(side="left", padx=(6, 0))
-        row += 1
+        r += 1
 
         ttk.Label(self, text="Fichiers à convertir :").grid(
-            row=row, column=0, sticky="w", pady=(8, 2))
-        row += 1
+            row=r, column=0, sticky="w", pady=(8, 2))
+        r += 1
 
-        list_frame = ttk.Frame(self)
-        list_frame.grid(row=row, column=0, sticky="nsew")
-        list_frame.columnconfigure(0, weight=1)
-        self.rowconfigure(row, weight=1)
-        self.listbox = tk.Listbox(list_frame, height=8, selectmode="extended",
+        lf = ttk.Frame(self)
+        lf.grid(row=r, column=0, sticky="nsew")
+        lf.columnconfigure(0, weight=1)
+        self.rowconfigure(r, weight=1)
+        self.listbox = tk.Listbox(lf, height=7, selectmode="extended",
                                   activestyle="none")
         self.listbox.grid(row=0, column=0, sticky="nsew")
-        sb = ttk.Scrollbar(list_frame, orient="vertical",
-                           command=self.listbox.yview)
+        sb = ttk.Scrollbar(lf, orient="vertical", command=self.listbox.yview)
         sb.grid(row=0, column=1, sticky="ns")
         self.listbox.configure(yscrollcommand=sb.set)
-        row += 1
+        r += 1
 
         self.count_label = ttk.Label(self, text="")
-        self.count_label.grid(row=row, column=0, sticky="w", pady=(2, 6))
-        row += 1
+        self.count_label.grid(row=r, column=0, sticky="w", pady=(2, 6))
+        r += 1
 
-        # --- Formats --------------------------------------------------
+        # --- Formats (3 cadres) --------------------------------------
         fmt = ttk.Frame(self)
-        fmt.grid(row=row, column=0, sticky="ew", pady=(0, 6))
-        fmt.columnconfigure(0, weight=1)
-        fmt.columnconfigure(1, weight=1)
+        fmt.grid(row=r, column=0, sticky="ew", pady=(0, 6))
+        for i, kind in enumerate(engine.KIND_ORDER):
+            fmt.columnconfigure(i, weight=1)
+            frame = ttk.LabelFrame(fmt, text=engine.KIND_LABELS[kind], padding=8)
+            frame.grid(row=0, column=i, sticky="nsew",
+                       padx=(0 if i == 0 else 4, 0))
+            self.frames[kind] = frame
+            for t in engine.TARGETS[kind]:
+                var = tk.BooleanVar(value=(t != "pdf"))  # PDF décoché par défaut
+                self.format_vars[kind][t] = var
+                ttk.Checkbutton(frame, text=engine.TARGET_LABELS.get(t, t),
+                                variable=var).pack(anchor="w")
+        r += 1
 
-        self.frame_3d = ttk.LabelFrame(fmt, text="Pièces / assemblages",
-                                       padding=8)
-        self.frame_3d.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
-        for t in engine.TARGETS["3d"]:
-            self._add_format_check(self.frame_3d, t, default=True)
-
-        self.frame_2d = ttk.LabelFrame(fmt, text="Mises en plan", padding=8)
-        self.frame_2d.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
-        for t in engine.TARGETS["2d"]:
-            # PDF décoché par défaut, DWG/DXF cochés
-            self._add_format_check(self.frame_2d, t, default=(t != "pdf"))
-        row += 1
+        # --- Nommage (préfixe / suffixe) -----------------------------
+        naming = ttk.LabelFrame(self, text="Nommage des fichiers", padding=8)
+        naming.grid(row=r, column=0, sticky="ew", pady=(0, 6))
+        naming.columnconfigure(1, weight=1)
+        naming.columnconfigure(3, weight=1)
+        ttk.Label(naming, text="Préfixe :").grid(row=0, column=0, sticky="w")
+        self.prefix_var = tk.StringVar()
+        self.prefix_var.trace_add("write", lambda *_: self._update_naming_preview())
+        ttk.Entry(naming, textvariable=self.prefix_var, width=16).grid(
+            row=0, column=1, sticky="ew", padx=(4, 10))
+        ttk.Label(naming, text="Suffixe :").grid(row=0, column=2, sticky="w")
+        self.suffix_var = tk.StringVar()
+        self.suffix_var.trace_add("write", lambda *_: self._update_naming_preview())
+        ttk.Entry(naming, textvariable=self.suffix_var, width=16).grid(
+            row=0, column=3, sticky="ew", padx=(4, 0))
+        self.naming_preview = ttk.Label(naming, text="", foreground="#555")
+        self.naming_preview.grid(row=1, column=0, columnspan=4, sticky="w",
+                                 pady=(4, 0))
+        r += 1
 
         # --- Destination ---------------------------------------------
         dest = ttk.LabelFrame(self, text="Destination", padding=8)
-        dest.grid(row=row, column=0, sticky="ew", pady=(0, 6))
+        dest.grid(row=r, column=0, sticky="ew", pady=(0, 6))
         dest.columnconfigure(1, weight=1)
         self.dest_mode = tk.StringVar(value="beside")
         ttk.Radiobutton(
@@ -131,41 +164,43 @@ class App(ttk.Frame):
         self.dest_browse = ttk.Button(dest, text="Parcourir…",
                                       command=self.choose_dest)
         self.dest_browse.grid(row=1, column=2)
-        row += 1
+        self.subfolder_note = ttk.Label(
+            dest, text="Plusieurs formats cochés seront rangés dans des "
+                       "sous-dossiers (STEP/, STL/, PDF/…).",
+            foreground="#555")
+        self.subfolder_note.grid(row=2, column=0, columnspan=3, sticky="w",
+                                 pady=(4, 0))
+        r += 1
 
-        # --- Action ---------------------------------------------------
+        # --- Progression + action ------------------------------------
         act = ttk.Frame(self)
-        act.grid(row=row, column=0, sticky="ew", pady=(0, 6))
+        act.grid(row=r, column=0, sticky="ew", pady=(0, 6))
         act.columnconfigure(0, weight=1)
-        self.progress = ttk.Progressbar(act, mode="indeterminate")
+        self.progress = ttk.Progressbar(act, mode="determinate", maximum=100)
         self.progress.grid(row=0, column=0, sticky="ew", padx=(0, 8))
         self.convert_btn = ttk.Button(act, text="Convertir",
                                       command=self.start_conversion)
         self.convert_btn.grid(row=0, column=1)
-        row += 1
+        self.eta_label = ttk.Label(act, text="")
+        self.eta_label.grid(row=1, column=0, columnspan=2, sticky="w",
+                            pady=(3, 0))
+        r += 1
 
         # --- Journal --------------------------------------------------
-        ttk.Label(self, text="Journal :").grid(row=row, column=0, sticky="w")
-        row += 1
-        log_frame = ttk.Frame(self)
-        log_frame.grid(row=row, column=0, sticky="nsew")
-        log_frame.columnconfigure(0, weight=1)
-        log_frame.rowconfigure(0, weight=1)
-        self.rowconfigure(row, weight=2)
-        self.log_text = tk.Text(log_frame, height=10, wrap="word", state="disabled")
+        ttk.Label(self, text="Journal :").grid(row=r, column=0, sticky="w")
+        r += 1
+        logf = ttk.Frame(self)
+        logf.grid(row=r, column=0, sticky="nsew")
+        logf.columnconfigure(0, weight=1)
+        logf.rowconfigure(0, weight=1)
+        self.rowconfigure(r, weight=2)
+        self.log_text = tk.Text(logf, height=9, wrap="word", state="disabled")
         self.log_text.grid(row=0, column=0, sticky="nsew")
-        lsb = ttk.Scrollbar(log_frame, orient="vertical",
-                            command=self.log_text.yview)
+        lsb = ttk.Scrollbar(logf, orient="vertical", command=self.log_text.yview)
         lsb.grid(row=0, column=1, sticky="ns")
         self.log_text.configure(yscrollcommand=lsb.set)
 
-    def _add_format_check(self, parent, target, default):
-        var = tk.BooleanVar(value=default)
-        self.format_vars[target] = var
-        cb = ttk.Checkbutton(parent, text=engine.TARGET_LABELS.get(target, target),
-                             variable=var)
-        cb.pack(anchor="w")
-        return cb
+        self._update_naming_preview()
 
     # ------------------------------------------------------------- actions
     def add_files(self):
@@ -185,15 +220,16 @@ class App(ttk.Frame):
             p = os.path.abspath(p)
             if p in existing:
                 continue
-            if engine.route_for(p) is None:
+            route = engine.route_for(p)
+            if route is None:
                 self.log("Ignoré (format non géré) : %s" % os.path.basename(p))
                 continue
             self.files.append(p)
             existing.add(p)
-            soft, kind = engine.route_for(p)
-            label = "pièce/assemblage" if kind == "3d" else "mise en plan"
+            soft, kind = route
             self.listbox.insert("end", "  [%s · %s]  %s" % (
-                engine.SOFTWARE_LABELS.get(soft, soft), label, p))
+                engine.SOFTWARE_LABELS.get(soft, soft),
+                engine.KIND_LABELS[kind].rstrip("s").lower(), p))
             added += 1
         if added:
             self._refresh_state()
@@ -219,16 +255,12 @@ class App(ttk.Frame):
 
     # -------------------------------------------------------------- helpers
     def _kinds_present(self):
-        has3d = has2d = False
+        present = set()
         for p in self.files:
             route = engine.route_for(p)
-            if not route:
-                continue
-            if route[1] == "3d":
-                has3d = True
-            else:
-                has2d = True
-        return has3d, has2d
+            if route:
+                present.add(route[1])
+        return present
 
     def _set_frame_state(self, frame, enabled):
         state = "normal" if enabled else "disabled"
@@ -238,49 +270,71 @@ class App(ttk.Frame):
             except tk.TclError:
                 pass
 
+    def _selection(self):
+        """dict nature -> liste de formats cochés."""
+        sel = {}
+        for kind in engine.KIND_ORDER:
+            sel[kind] = [t for t in engine.TARGETS[kind]
+                         if self.format_vars[kind][t].get()]
+        return sel
+
+    def _distinct_selected_formats(self):
+        present = self._kinds_present()
+        sel = self._selection()
+        distinct = set()
+        for kind in present:
+            distinct.update(sel.get(kind, []))
+        return distinct
+
+    def _update_naming_preview(self):
+        pre = engine.sanitize_affix(self.prefix_var.get())
+        suf = engine.sanitize_affix(self.suffix_var.get())
+        self.naming_preview.configure(
+            text="Exemple : %sma_piece%s.step" % (pre, suf))
+
     def _refresh_state(self):
-        has3d, has2d = self._kinds_present()
-        self._set_frame_state(self.frame_3d, has3d)
-        self._set_frame_state(self.frame_2d, has2d)
+        present = self._kinds_present()
+        for kind in engine.KIND_ORDER:
+            self._set_frame_state(self.frames[kind], kind in present)
 
         custom = self.dest_mode.get() == "custom"
         self.dest_entry.configure(state="normal" if custom else "disabled")
         self.dest_browse.configure(state="normal" if custom else "disabled")
 
-        n = len(self.files)
-        n3 = sum(1 for p in self.files if (engine.route_for(p) or (None, None))[1] == "3d")
-        n2 = n - n3
+        counts = {k: 0 for k in engine.KIND_ORDER}
+        for p in self.files:
+            route = engine.route_for(p)
+            if route:
+                counts[route[1]] += 1
         self.count_label.configure(
-            text="%d fichier(s) : %d pièce(s)/assemblage(s), %d mise(s) en plan"
-            % (n, n3, n2))
+            text="%d fichier(s) : %d pièce(s), %d assemblage(s), %d mise(s) en plan"
+            % (len(self.files), counts["part"], counts["assembly"],
+               counts["drawing"]))
 
         busy = self._worker is not None and self._worker.is_alive()
-        self.convert_btn.configure(state="disabled" if busy or n == 0 else "normal")
+        self.convert_btn.configure(
+            state="disabled" if busy or not self.files else "normal")
 
     # ----------------------------------------------------------- conversion
-    def _selected_formats(self, kind):
-        return [t for t in engine.TARGETS[kind] if self.format_vars[t].get()]
-
     def start_conversion(self):
         if not self.files:
             return
-        sel3d = self._selected_formats("3d")
-        sel2d = self._selected_formats("2d")
-        has3d, has2d = self._kinds_present()
-        if (has3d and not sel3d) and (has2d and not sel2d):
-            messagebox.showwarning("Aucun format",
-                                   "Cochez au moins un format de sortie.")
+        present = self._kinds_present()
+        sel = self._selection()
+
+        # nature présente mais sans aucun format coché -> avertir
+        ignored = [engine.KIND_LABELS[k] for k in present if not sel.get(k)]
+        if len(ignored) == len(present):
+            messagebox.showwarning(
+                "Aucun format", "Cochez au moins un format de sortie.")
             return
-        if has3d and not sel3d:
-            messagebox.showwarning(
-                "Aucun format 3D",
-                "Des pièces/assemblages sont sélectionnés mais aucun format "
-                "(STEP/STL) n'est coché : ils seront ignorés.")
-        if has2d and not sel2d:
-            messagebox.showwarning(
-                "Aucun format plan",
-                "Des mises en plan sont sélectionnées mais aucun format "
-                "(DWG/DXF/PDF) n'est coché : elles seront ignorées.")
+        if ignored:
+            if not messagebox.askyesno(
+                    "Formats manquants",
+                    "Aucun format coché pour : %s.\n"
+                    "Ces fichiers seront ignorés. Continuer ?"
+                    % ", ".join(ignored)):
+                return
 
         dest_dir = None
         if self.dest_mode.get() == "custom":
@@ -290,6 +344,11 @@ class App(ttk.Frame):
                                        "Indiquez un dossier de destination.")
                 return
 
+        subfolders = len(self._distinct_selected_formats()) > 1
+        opts = engine.ExportOptions(
+            dest_dir=dest_dir, subfolders=subfolders,
+            prefix=self.prefix_var.get(), suffix=self.suffix_var.get())
+
         groups, skipped = engine.group_by_software(self.files)
         for f in skipped:
             self.log("Ignoré (format non géré) : %s" % os.path.basename(f))
@@ -297,26 +356,38 @@ class App(ttk.Frame):
             self.log("Aucun fichier CAO/DAO reconnu.")
             return
 
+        self._total = engine.count_exports(groups, sel)
+        if self._total == 0:
+            messagebox.showwarning("Rien à faire",
+                                   "Aucun export ne correspond aux formats cochés.")
+            return
+
         self._stop = False
-        self.progress.start(12)
+        self._start_time = time.time()
+        self.progress.configure(maximum=self._total, value=0)
+        self.eta_label.configure(text="Préparation…")
         self.convert_btn.configure(state="disabled")
         self.log("")
-        self.log(">>> Démarrage de la conversion…")
+        self.log(">>> Démarrage de la conversion (%d export(s))…" % self._total)
+        if subfolders:
+            self.log("    Rangement par sous-dossiers de format activé.")
 
         def work():
-            # COM doit être initialisé dans ce thread
             try:
                 import pythoncom
                 pythoncom.CoInitialize()
             except Exception:
                 pythoncom = None
             try:
-                engine.convert_groups(
-                    groups, sel3d, sel2d, dest_dir=dest_dir,
+                res = engine.convert_groups(
+                    groups, sel, opts,
                     log=lambda m: self._queue.put(("log", m)),
+                    progress=lambda d, t: self._queue.put(("progress", (d, t))),
                     stop_flag=lambda: self._stop)
+                self._queue.put(("result", res))
             except Exception as e:
                 self._queue.put(("log", "ERREUR : %s" % e))
+                self._queue.put(("result", (0, 0, [("", "", str(e))])))
             finally:
                 if pythoncom is not None:
                     try:
@@ -336,13 +407,52 @@ class App(ttk.Frame):
                 kind, payload = self._queue.get_nowait()
                 if kind == "log":
                     self.log(payload)
+                elif kind == "progress":
+                    self._on_progress(*payload)
+                elif kind == "result":
+                    self._last_result = payload
                 elif kind == "done":
-                    self.progress.stop()
-                    self.log(">>> Conversion terminée.")
-                    self._refresh_state()
+                    self._on_done()
         except queue.Empty:
             pass
         self.after(120, self._poll_queue)
+
+    def _on_progress(self, done, total):
+        self.progress.configure(value=done)
+        elapsed = time.time() - (self._start_time or time.time())
+        if done > 0:
+            remaining = elapsed / done * (total - done)
+            self.eta_label.configure(
+                text="%d / %d exports  ·  temps restant estimé : %s"
+                % (done, total, _fmt_duration(remaining)))
+        else:
+            self.eta_label.configure(text="%d / %d exports" % (done, total))
+
+    def _on_done(self):
+        self.progress.configure(value=self.progress["maximum"])
+        self.eta_label.configure(text="Terminé.")
+        self._refresh_state()
+        res = getattr(self, "_last_result", None)
+        self.log(">>> Conversion terminée.")
+        if res is None:
+            return
+        ok, total, failures = res
+        if not failures:
+            messagebox.showinfo(
+                "Conversion terminée",
+                "Tout est OK : %d/%d export(s) réussi(s)." % (ok, total))
+        else:
+            lines = []
+            for f, t, msg in failures:
+                name = os.path.basename(f) if f else "(session)"
+                lines.append("• %s  [%s]  — %s" % (name, t.upper() if t else "?", msg))
+            detail = "\n".join(lines[:25])
+            if len(lines) > 25:
+                detail += "\n… et %d autre(s)." % (len(lines) - 25)
+            messagebox.showwarning(
+                "Conversion terminée avec des échecs",
+                "%d/%d export(s) réussi(s).\n\n"
+                "Fichiers/formats NON convertis :\n%s" % (ok, total, detail))
 
     def log(self, msg):
         self.log_text.configure(state="normal")
@@ -354,9 +464,9 @@ class App(ttk.Frame):
 def main():
     root = tk.Tk()
     root.title("Convertisseur CAO/DAO par lot")
-    root.geometry("760x680")
+    root.geometry("820x780")
     try:
-        ttk.Style().theme_use("vista")   # thème natif Windows si dispo
+        ttk.Style().theme_use("vista")
     except tk.TclError:
         pass
     App(root)

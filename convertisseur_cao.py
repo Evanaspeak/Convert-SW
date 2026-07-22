@@ -7,14 +7,13 @@ On ne convertit rien "à la main" : on PILOTE les logiciels de CAO déjà
 installés via leur automation COM (pywin32). Chaque logiciel n'est lancé
 qu'une seule fois, quel que soit le nombre de fichiers à traiter.
 
-Formats de sortie possibles :
-    - Pièces / assemblages  -> STEP (.step) et/ou STL (.stl)
-    - Mises en plan         -> DWG (.dwg), DXF (.dxf) et/ou PDF (.pdf)
+Trois natures de fichiers, chacune avec ses formats de sortie :
+    - Pièces       -> STEP (.step) et/ou STL (.stl)
+    - Assemblages  -> STEP (.step) et/ou STL (.stl)
+    - Mises en plan-> DWG (.dwg), DXF (.dxf) et/ou PDF (.pdf)
 
-Ce fichier contient le MOTEUR (routage + handlers) et une petite interface
-en ligne de commande. L'interface graphique est dans convertisseur_gui.py.
-
-Sans argument, on ouvre l'interface graphique.
+Ce fichier contient le MOTEUR. L'interface graphique est dans
+convertisseur_gui.py. Sans argument, on ouvre l'interface graphique.
 
 Usage ligne de commande :
     python convertisseur_cao.py fichier1.sldprt dossier\\ ...
@@ -35,33 +34,42 @@ import traceback
 # Configuration / routage
 # ---------------------------------------------------------------------------
 
-# ext (en minuscules) -> (logiciel, nature)   nature : "3d" ou "2d"
+# ext (en minuscules) -> (logiciel, nature)
+# nature : "part" (pièce) | "assembly" (assemblage) | "drawing" (mise en plan)
 ROUTES = {
-    ".sldprt":     ("solidworks", "3d"),
-    ".sldasm":     ("solidworks", "3d"),
-    ".slddrw":     ("solidworks", "2d"),
+    ".sldprt":     ("solidworks", "part"),
+    ".sldasm":     ("solidworks", "assembly"),
+    ".slddrw":     ("solidworks", "drawing"),
 
-    ".catpart":    ("catia", "3d"),
-    ".catproduct": ("catia", "3d"),
-    ".catdrawing": ("catia", "2d"),
+    ".catpart":    ("catia", "part"),
+    ".catproduct": ("catia", "assembly"),
+    ".catdrawing": ("catia", "drawing"),
 
-    ".ipt":        ("inventor", "3d"),
-    ".iam":        ("inventor", "3d"),
-    ".idw":        ("inventor", "2d"),
+    ".ipt":        ("inventor", "part"),
+    ".iam":        ("inventor", "assembly"),
+    ".idw":        ("inventor", "drawing"),
 
-    ".prt":        ("creo", "3d"),
-    ".asm":        ("creo", "3d"),
-    ".drw":        ("creo", "2d"),
+    ".prt":        ("creo", "part"),
+    ".asm":        ("creo", "assembly"),
+    ".drw":        ("creo", "drawing"),
 }
 
-# Formats proposés par nature. Sert de valeurs par défaut (CLI) et de liste
-# de référence pour l'interface graphique.
+# Formats proposés par nature (valeurs par défaut pour la CLI et l'interface).
 TARGETS = {
-    "3d": ["step", "stl"],
-    "2d": ["dwg", "dxf", "pdf"],
+    "part":     ["step", "stl"],
+    "assembly": ["step", "stl"],
+    "drawing":  ["dwg", "dxf", "pdf"],
 }
 
-# Libellés affichés dans l'interface
+# Ordre d'affichage des natures dans l'interface
+KIND_ORDER = ["part", "assembly", "drawing"]
+
+KIND_LABELS = {
+    "part":     "Pièces",
+    "assembly": "Assemblages",
+    "drawing":  "Mises en plan",
+}
+
 TARGET_LABELS = {
     "step": "STEP (.step)",
     "stl":  "STL (.stl)",
@@ -79,6 +87,9 @@ SOFTWARE_LABELS = {
 
 # Creo numérote ses fichiers : « carter.prt.3 ». On retire le suffixe « .N ».
 _CREO_VERSIONED = re.compile(r"^(?P<stem>.*\.(?:prt|asm|drw))\.\d+$", re.IGNORECASE)
+
+# Caractères interdits dans un nom de fichier Windows (pour préfixe/suffixe)
+_BAD_NAME_CHARS = re.compile(r'[<>:"/\\|?*]')
 
 
 def route_for(path):
@@ -101,25 +112,44 @@ def clean_stem(path):
     return stem
 
 
+def sanitize_affix(text):
+    """Nettoie un préfixe/suffixe (retire les caractères interdits)."""
+    return _BAD_NAME_CHARS.sub("", text or "")
+
+
 def export_dir_for(path):
-    """Crée (au besoin) et renvoie le dossier « Export » à côté du fichier."""
+    """Renvoie le dossier « Export » à côté du fichier (créé au besoin)."""
     d = os.path.join(os.path.dirname(os.path.abspath(path)), "Export")
     os.makedirs(d, exist_ok=True)
     return d
 
 
-def output_path(src, target, dest_dir=None):
-    """Chemin de sortie pour un fichier source et un format cible.
+class ExportOptions(object):
+    """Options de sortie communes à toute une conversion.
 
-    dest_dir=None -> sous-dossier « Export » à côté du fichier source.
-    dest_dir=chemin -> ce dossier (créé au besoin).
+    dest_dir   : dossier de destination unique (None = « Export » à côté
+                 de chaque fichier source).
+    subfolders : True -> ranger chaque format dans son sous-dossier
+                 (STEP/, STL/, DWG/, DXF/, PDF/).
+    prefix     : texte ajouté DEVANT le nom de fichier.
+    suffix     : texte ajouté DERRIÈRE le nom (avant l'extension).
     """
-    if dest_dir:
-        os.makedirs(dest_dir, exist_ok=True)
-        folder = dest_dir
-    else:
-        folder = export_dir_for(src)
-    return os.path.join(folder, clean_stem(src) + "." + target)
+    def __init__(self, dest_dir=None, subfolders=False, prefix="", suffix=""):
+        self.dest_dir = dest_dir or None
+        self.subfolders = bool(subfolders)
+        self.prefix = sanitize_affix(prefix)
+        self.suffix = sanitize_affix(suffix)
+
+
+def output_path(src, target, opts=None):
+    """Chemin de sortie pour un fichier source et un format cible."""
+    if opts is None:
+        opts = ExportOptions()
+    base = opts.dest_dir if opts.dest_dir else export_dir_for(src)
+    folder = os.path.join(base, target.upper()) if opts.subfolders else base
+    os.makedirs(folder, exist_ok=True)
+    name = "%s%s%s.%s" % (opts.prefix, clean_stem(src), opts.suffix, target)
+    return os.path.join(folder, name)
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +190,7 @@ class Handler(object):
     def start(self):
         raise NotImplementedError
 
-    def convert(self, src, targets, dest_dir=None):
+    def convert(self, src, targets, opts):
         """Convertit un fichier vers chaque format de `targets`.
 
         Renvoie une liste de tuples (target, outpath, ok, message).
@@ -264,14 +294,14 @@ class SolidWorksHandler(Handler):
             raise last_err
         return False
 
-    def convert(self, src, targets, dest_dir=None):
+    def convert(self, src, targets, opts):
         results = []
         try:
             ext = os.path.splitext(src.lower())[1]
             doc = self._open(src, ext)
         except Exception as e:
             for t in targets:
-                results.append((t, output_path(src, t, dest_dir), False, "ouverture: %s" % e))
+                results.append((t, output_path(src, t, opts), False, "ouverture: %s" % e))
             return results
 
         title = None
@@ -281,7 +311,7 @@ class SolidWorksHandler(Handler):
             pass
 
         for t in targets:
-            out = output_path(src, t, dest_dir)
+            out = output_path(src, t, opts)
             try:
                 ok = self._save(doc, out) and os.path.exists(out)
                 results.append((t, out, ok, "" if ok else "SaveAs a échoué"))
@@ -296,8 +326,6 @@ class SolidWorksHandler(Handler):
         return results
 
     def stop(self):
-        # On laisse SolidWorks ouvert (plus rapide, et on ne tue pas une
-        # session que l'utilisateur avait déjà lancée).
         pass
 
 
@@ -329,17 +357,17 @@ class CatiaHandler(Handler):
         except Exception:
             pass
 
-    def convert(self, src, targets, dest_dir=None):
+    def convert(self, src, targets, opts):
         results = []
         try:
             doc = self.app.Documents.Open(src)
         except Exception as e:
             for t in targets:
-                results.append((t, output_path(src, t, dest_dir), False, "ouverture: %s" % e))
+                results.append((t, output_path(src, t, opts), False, "ouverture: %s" % e))
             return results
 
         for t in targets:
-            out = output_path(src, t, dest_dir)
+            out = output_path(src, t, opts)
             ok, msg = False, ""
             for fmt in self._FORMATS.get(t, [t]):
                 try:
@@ -366,7 +394,6 @@ class InventorHandler(Handler):
 
     _KFILEBROWSE = 13059  # kFileBrowseIOMechanism
 
-    # target -> (mot-clé DisplayName, GUID du traducteur)
     _TRANSLATORS = {
         "step": ("STEP", "{90AF7F40-0C01-11D5-B79E-0010B3AF2C1B}"),
         "stl":  ("STL",  "{81D58C09-F638-42B4-BD3E-F5DAC29F94D1}"),
@@ -411,7 +438,7 @@ class InventorHandler(Handler):
         self._addin_cache[target] = found
         return found
 
-    def convert(self, src, targets, dest_dir=None):
+    def convert(self, src, targets, opts):
         results = []
         try:
             doc = self.app.Documents.Open(src, False)
@@ -420,12 +447,12 @@ class InventorHandler(Handler):
                 doc = self.app.Documents.Open(src)
             except Exception as e:
                 for t in targets:
-                    results.append((t, output_path(src, t, dest_dir), False, "ouverture: %s" % e))
+                    results.append((t, output_path(src, t, opts), False, "ouverture: %s" % e))
                 return results
 
         to = self.app.TransientObjects
         for t in targets:
-            out = output_path(src, t, dest_dir)
+            out = output_path(src, t, opts)
             addin = self._translator(t)
             if addin is None:
                 results.append((t, out, False, "traducteur %s introuvable" % t.upper()))
@@ -437,15 +464,15 @@ class InventorHandler(Handler):
                     pass
                 ctx = to.CreateTranslationContext()
                 ctx.Type = self._KFILEBROWSE
-                opts = to.CreateNameValueMap()
+                options = to.CreateNameValueMap()
                 med = to.CreateDataMedium()
                 med.FileName = out
                 try:
-                    if addin.HasSaveCopyAsOptions(doc, ctx, opts) and t == "step":
-                        opts.Add("ApplicationProtocolType", 3)  # AP214
+                    if addin.HasSaveCopyAsOptions(doc, ctx, options) and t == "step":
+                        options.Add("ApplicationProtocolType", 3)  # AP214
                 except Exception:
                     pass
-                addin.SaveCopyAs(doc, ctx, opts, med)
+                addin.SaveCopyAs(doc, ctx, options, med)
                 ok = os.path.exists(out)
                 results.append((t, out, ok, "" if ok else "SaveCopyAs sans fichier produit"))
             except Exception as e:
@@ -505,7 +532,7 @@ class CreoHandler(Handler):
         }[target]
         return w.Dispatch(cls).Create()
 
-    def convert(self, src, targets, dest_dir=None):
+    def convert(self, src, targets, opts):
         results = []
         try:
             from_dir = os.path.dirname(os.path.abspath(src))
@@ -518,11 +545,11 @@ class CreoHandler(Handler):
             model = self.session.RetrieveModel(descr)
         except Exception as e:
             for t in targets:
-                results.append((t, output_path(src, t, dest_dir), False, "ouverture: %s" % e))
+                results.append((t, output_path(src, t, opts), False, "ouverture: %s" % e))
             return results
 
         for t in targets:
-            out = output_path(src, t, dest_dir)
+            out = output_path(src, t, opts)
             try:
                 model.Export(out, self._instructions(t))
                 ok = os.path.exists(out)
@@ -577,18 +604,40 @@ def group_by_software(files):
     return groups, skipped
 
 
-def convert_groups(groups, sel3d, sel2d, dest_dir=None, log=default_log,
-                   stop_flag=None):
+def count_exports(groups, selection):
+    """Nombre total d'exports prévus pour un jeu de sélections."""
+    total = 0
+    for items in groups.values():
+        for _f, kind in items:
+            total += len(selection.get(kind, []))
+    return total
+
+
+def convert_groups(groups, selection, opts=None, log=default_log,
+                   progress=None, stop_flag=None):
     """Convertit tous les fichiers groupés par logiciel.
 
-    sel3d / sel2d : listes de formats retenus pour 3D / 2D.
-    stop_flag : callable() -> bool, permet d'interrompre proprement.
-    Renvoie (total_ok, total).
+    selection : dict nature -> liste de formats retenus
+                (ex. {"part": ["step","stl"], "assembly": ["step"], ...}).
+    opts      : ExportOptions.
+    progress  : callable(done, total) appelé après chaque export.
+    stop_flag : callable() -> bool pour interrompre proprement.
+
+    Renvoie (total_ok, total, failures) où failures est une liste de
+    tuples (chemin_source, format, message).
     """
-    total_ok = total = 0
+    if opts is None:
+        opts = ExportOptions()
+    total = count_exports(groups, selection)
+    done = total_ok = 0
+    failures = []
+
     for soft, items in groups.items():
         if stop_flag and stop_flag():
             break
+        # ne traiter ce logiciel que s'il a au moins un format retenu
+        if not any(selection.get(kind) for _f, kind in items):
+            continue
         log("=" * 56)
         log("%s : %d fichier(s)" % (SOFTWARE_LABELS.get(soft, soft), len(items)))
 
@@ -598,28 +647,35 @@ def convert_groups(groups, sel3d, sel2d, dest_dir=None, log=default_log,
         except Exception as e:
             log("  Impossible de démarrer %s : %s" % (handler.name, e))
             for f, kind in items:
-                total += len(sel3d if kind == "3d" else sel2d)
+                for t in selection.get(kind, []):
+                    failures.append((f, t, "démarrage %s: %s" % (handler.name, e)))
+                    done += 1
+                    if progress:
+                        progress(done, total)
             continue
 
         for f, kind in items:
             if stop_flag and stop_flag():
                 break
-            targets = list(sel3d if kind == "3d" else sel2d)
+            targets = list(selection.get(kind, []))
             if not targets:
                 continue
             log("  > %s" % os.path.basename(f))
             try:
-                res = handler.convert(f, targets, dest_dir)
+                res = handler.convert(f, targets, opts)
             except Exception as e:
                 log("    ERREUR inattendue : %s" % e)
-                res = [(t, output_path(f, t, dest_dir), False, str(e)) for t in targets]
+                res = [(t, output_path(f, t, opts), False, str(e)) for t in targets]
             for t, out, ok, msg in res:
-                total += 1
+                done += 1
                 if ok:
                     total_ok += 1
                     log("    OK  %s -> %s" % (t.upper(), out))
                 else:
+                    failures.append((f, t, msg))
                     log("    KO  %s : %s" % (t.upper(), msg))
+                if progress:
+                    progress(done, total)
 
         try:
             handler.stop()
@@ -628,7 +684,7 @@ def convert_groups(groups, sel3d, sel2d, dest_dir=None, log=default_log,
 
     log("=" * 56)
     log("Terminé : %d/%d export(s) réussi(s)." % (total_ok, total))
-    return total_ok, total
+    return total_ok, total, failures
 
 
 # ---------------------------------------------------------------------------
@@ -647,20 +703,29 @@ def run_cli(paths, dry_run=False):
         default_log("Aucun fichier CAO/DAO reconnu.")
         return 1
 
+    # En CLI : tous les formats par défaut. Sous-dossiers si plus d'un format
+    # distinct est produit.
+    selection = {k: list(v) for k, v in TARGETS.items()}
+    distinct = set()
+    for items in groups.values():
+        for _f, kind in items:
+            distinct.update(selection.get(kind, []))
+    opts = ExportOptions(subfolders=len(distinct) > 1)
+
     if dry_run:
         n = 0
         for soft, items in groups.items():
             default_log("=" * 56)
             default_log("%s : %d fichier(s)" % (SOFTWARE_LABELS.get(soft, soft), len(items)))
             for f, kind in items:
-                for t in TARGETS[kind]:
-                    default_log("  [dry-run] %s -> %s" % (os.path.basename(f), output_path(f, t)))
+                for t in selection.get(kind, []):
+                    default_log("  [dry-run] %s -> %s" % (os.path.basename(f), output_path(f, t, opts)))
                     n += 1
         default_log("Simulation terminée : %d export(s) prévu(s)." % n)
         return 0
 
-    convert_groups(groups, TARGETS["3d"], TARGETS["2d"], dest_dir=None, log=default_log)
-    return 0
+    _ok, _tot, failures = convert_groups(groups, selection, opts, log=default_log)
+    return 0 if not failures else 2
 
 
 def main(argv):
@@ -669,7 +734,6 @@ def main(argv):
         print(__doc__)
         return 0
     if not args:
-        # Aucun argument : on ouvre l'interface graphique.
         try:
             import convertisseur_gui
             return convertisseur_gui.main()

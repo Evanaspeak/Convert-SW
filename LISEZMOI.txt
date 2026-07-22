@@ -32,17 +32,26 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
   1. Double-cliquez sur « Convertisseur_CAO.bat ». Une fenêtre s'ouvre.
   2. « Ajouter des fichiers… » : sélectionnez vos fichiers depuis leur
      emplacement (multi-sélection possible). Ou « Ajouter un dossier… ».
-  3. Cochez les formats voulus :
-       - Pièces / assemblages : STEP, STL
-       - Mises en plan        : DWG, DXF, PDF
-     (les cases inutiles sont grisées selon les fichiers ajoutés)
-  4. Destination :
+  3. Cochez les formats voulus, dans le cadre correspondant :
+       - Pièces        : STEP, STL
+       - Assemblages   : STEP, STL   (cadre séparé)
+       - Mises en plan : DWG, DXF, PDF
+     Les cadres sans fichier concerné sont grisés automatiquement. Les
+     cases STEP/STL des « Pièces » et des « Assemblages » sont
+     indépendantes.
+  4. Nommage (facultatif) : ajoutez un préfixe et/ou un suffixe aux noms
+     de sortie (un aperçu s'affiche).
+  5. Destination :
        - « À côté de chaque fichier » : un sous-dossier « Export » est
          créé à côté de chaque source (par défaut) ;
        - « Dossier personnalisé » : cliquez « Parcourir… » pour choisir
          un dossier de sortie unique.
-  5. Cliquez « Convertir ». Le journal s'affiche en direct dans la
-     fenêtre. Chaque logiciel n'est lancé qu'une seule fois.
+     Si plusieurs formats sont cochés, chacun est rangé dans son propre
+     sous-dossier (STEP/, STL/, DWG/, DXF/, PDF/).
+  6. Cliquez « Convertir ». La barre indique l'avancement réel et le
+     temps restant estimé ; le journal défile en direct. Un bilan
+     s'affiche à la fin (et la liste des fichiers/formats non convertis
+     en cas d'échec). Chaque logiciel n'est lancé qu'une seule fois.
 
 ----------------------------------------------------------------------
  UTILISATION — SANS FENÊTRE (optionnel)
@@ -64,14 +73,13 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
 ----------------------------------------------------------------------
  CORRESPONDANCES FICHIERS -> LOGICIELS
 ----------------------------------------------------------------------
-      .sldprt/.sldasm . . . . . . . SolidWorks -> STEP + STL
-      .slddrw . . . . . . . . . . . SolidWorks -> DWG + DXF + PDF
-      .CATPart/.CATProduct  . . . . CATIA V5   -> STEP + STL
-      .CATDrawing . . . . . . . . . CATIA V5   -> DWG + DXF + PDF
-      .ipt/.iam . . . . . . . . . . Inventor   -> STEP + STL
-      .idw  . . . . . . . . . . . . Inventor   -> DWG + DXF + PDF
-      .prt/.asm (y c. « .prt.3 »).  Creo       -> STEP + STL
-      .drw  . . . . . . . . . . . . Creo       -> DWG + DXF + PDF
+      Pièces
+        .sldprt / .CATPart / .ipt / .prt . . . . . . . -> STEP + STL
+      Assemblages
+        .sldasm / .CATProduct / .iam / .asm  . . . . . -> STEP + STL
+      Mises en plan
+        .slddrw / .CATDrawing / .idw / .drw . . . . . . -> DWG + DXF + PDF
+      (Creo : fichiers versionnés « .prt.3 », « .asm.12 » gérés.)
 
 ----------------------------------------------------------------------
  ÉTAT PAR LOGICIEL
@@ -80,6 +88,14 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
                 Correctif DISP_E_TYPEMISMATCH en place (VARIANT byref sur
                 les arguments Errors/Warnings de OpenDoc6 et SaveAs).
                 Restent à valider : assemblage, mise en plan (DWG/DXF/PDF).
+
+                NOTE assemblage -> STL : si le STL d'un assemblage échoue,
+                c'est en général une boîte de dialogue SolidWorks invisible
+                en mode silencieux (« enregistrer tous les composants dans
+                un seul fichier »). À régler UNE FOIS dans SolidWorks :
+                Outils > Options > Exportation > STL > cocher « Enregistrer
+                tous les composants d'un assemblage dans un seul fichier ».
+                Le STEP d'assemblage, lui, ne pose pas ce souci.
 
   CATIA V5    : ÉCRIT, à valider. ExportData(chemin, format) ; format STEP
                 essayé en "stp" puis "step". Licence STEP requise.
