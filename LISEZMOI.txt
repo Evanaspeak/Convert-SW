@@ -3,117 +3,107 @@
 ======================================================================
 
 But : convertir par lot, en local et gratuitement, des pièces /
-assemblages en STEP + STL et des mises en plan en DWG + DXF, en
+assemblages en STEP + STL et des mises en plan en DWG + DXF (+ PDF), en
 pilotant les logiciels de CAO déjà installés via leur automation COM
 (pywin32). Aucun convertisseur payant, aucun envoi de fichier en ligne.
 
 ----------------------------------------------------------------------
- FICHIERS DU PROJET (à placer ensemble, p. ex. dans C:\CAD)
+ FICHIERS DU PROJET (à placer ensemble dans un même dossier)
 ----------------------------------------------------------------------
-  convertisseur_cao.py  Script principal (détection, regroupement,
-                        pilotage des logiciels, export).
-  Convertir_ici.bat     Lanceur glisser-déposer.
-  menu_contextuel.reg   Entrées de menu clic droit (chemin à éditer).
-  LISEZMOI.txt          Ce fichier.
+  Convertisseur_CAO.bat   >>> DOUBLE-CLIC pour ouvrir la fenêtre <<<
+  convertisseur_gui.py    Interface graphique (fenêtre).
+  convertisseur_cao.py    Moteur (routage + pilotage des logiciels).
+  Convertir_ici.bat       Lanceur glisser-déposer (optionnel, sans fenêtre).
+  menu_contextuel.reg     Entrées de menu clic droit (optionnel).
+  LISEZMOI.txt            Ce fichier.
 
 ----------------------------------------------------------------------
  PRÉREQUIS
 ----------------------------------------------------------------------
   - Windows.
-  - Python 3 (64 bits) + pywin32 :  py -3 -m pip install pywin32
+  - Python 3 (64 bits) installé depuis python.org (inclut tkinter, qui
+    sert à l'interface graphique).
+  - pywin32 :   py -3 -m pip install pywin32
   - Les logiciels de CAO concernés installés sur la machine.
 
 ----------------------------------------------------------------------
- UTILISATION
+ UTILISATION — INTERFACE GRAPHIQUE (recommandé)
 ----------------------------------------------------------------------
-  Glisser-déposer (recommandé pour un lot) :
-      Sélectionnez vos fichiers, glissez-les sur « Convertir_ici.bat ».
-      -> tous les fichiers sont envoyés en une seule fois, chaque
-         logiciel n'est lancé qu'une fois.
+  1. Double-cliquez sur « Convertisseur_CAO.bat ». Une fenêtre s'ouvre.
+  2. « Ajouter des fichiers… » : sélectionnez vos fichiers depuis leur
+     emplacement (multi-sélection possible). Ou « Ajouter un dossier… ».
+  3. Cochez les formats voulus :
+       - Pièces / assemblages : STEP, STL
+       - Mises en plan        : DWG, DXF, PDF
+     (les cases inutiles sont grisées selon les fichiers ajoutés)
+  4. Destination :
+       - « À côté de chaque fichier » : un sous-dossier « Export » est
+         créé à côté de chaque source (par défaut) ;
+       - « Dossier personnalisé » : cliquez « Parcourir… » pour choisir
+         un dossier de sortie unique.
+  5. Cliquez « Convertir ». Le journal s'affiche en direct dans la
+     fenêtre. Chaque logiciel n'est lancé qu'une seule fois.
+
+----------------------------------------------------------------------
+ UTILISATION — SANS FENÊTRE (optionnel)
+----------------------------------------------------------------------
+  Glisser-déposer :
+      Glissez vos fichiers sur « Convertir_ici.bat » (exporte tous les
+      formats par défaut, à côté des fichiers).
 
   Ligne de commande :
-      py -3 convertisseur_cao.py fichier1.sldprt dossier\  ...
+      py -3 convertisseur_cao.py fichier.sldprt dossier\ ...
       py -3 convertisseur_cao.py --dry-run *.CATPart   (simulation)
       py -3 convertisseur_cao.py --help
+      py -3 convertisseur_cao.py            (sans argument = ouvre la fenêtre)
 
   Clic droit (un fichier à la fois) :
-      Éditez menu_contextuel.reg (remplacez C:\CAD par votre dossier),
+      Éditez menu_contextuel.reg (remplacez le chemin par votre dossier),
       double-cliquez pour l'importer.
 
-  Un dossier passé en argument est parcouru récursivement (les
-  sous-dossiers « Export » et cachés sont ignorés).
-
 ----------------------------------------------------------------------
- SORTIES
+ CORRESPONDANCES FICHIERS -> LOGICIELS
 ----------------------------------------------------------------------
-  Chaque export est rangé dans un sous-dossier « Export » créé à côté
-  du fichier source. Un journal « conversion.log » y est ajouté.
-
-  Correspondances :
       .sldprt/.sldasm . . . . . . . SolidWorks -> STEP + STL
-      .slddrw . . . . . . . . . . . SolidWorks -> DWG + DXF
+      .slddrw . . . . . . . . . . . SolidWorks -> DWG + DXF + PDF
       .CATPart/.CATProduct  . . . . CATIA V5   -> STEP + STL
-      .CATDrawing . . . . . . . . . CATIA V5   -> DWG + DXF
+      .CATDrawing . . . . . . . . . CATIA V5   -> DWG + DXF + PDF
       .ipt/.iam . . . . . . . . . . Inventor   -> STEP + STL
-      .idw  . . . . . . . . . . . . Inventor   -> DWG + DXF
+      .idw  . . . . . . . . . . . . Inventor   -> DWG + DXF + PDF
       .prt/.asm (y c. « .prt.3 »).  Creo       -> STEP + STL
-      .drw  . . . . . . . . . . . . Creo       -> DWG + DXF
+      .drw  . . . . . . . . . . . . Creo       -> DWG + DXF + PDF
 
 ----------------------------------------------------------------------
- ÉTAT PAR LOGICIEL  (À VALIDER SUR LA MACHINE)
+ ÉTAT PAR LOGICIEL
 ----------------------------------------------------------------------
-IMPORTANT : ce code n'a PAS pu être exécuté contre les vrais logiciels
-(développé hors Windows). La logique et les correctifs connus sont en
-place ; il reste à tester chaque logiciel sur une vraie pièce.
+  SolidWorks  : TESTÉ ET FONCTIONNEL (pièce .sldprt -> STEP + STL OK).
+                Correctif DISP_E_TYPEMISMATCH en place (VARIANT byref sur
+                les arguments Errors/Warnings de OpenDoc6 et SaveAs).
+                Restent à valider : assemblage, mise en plan (DWG/DXF/PDF).
 
-  SolidWorks
-    - Correctif du DISP_E_TYPEMISMATCH : les arguments [out] Errors /
-      Warnings de OpenDoc6 et de SaveAs sont désormais passés comme des
-      VARIANT « byref » (VT_BYREF | VT_I4), et non comme des entiers.
-      C'est la cause classique de « argerr 4 ».
-    - _open et _save restent auto-adaptatives : elles essaient plusieurs
-      conventions (OpenDoc6 VARIANT -> OpenDoc6 entiers -> OpenDoc ;
-      Extension.SaveAs -> SaveAs3 -> Doc.SaveAs4 -> Doc.SaveAs3) et
-      mémorisent la première qui fonctionne.
-    - À tester : une pièce .sldprt réelle -> STEP + STL.
+  CATIA V5    : ÉCRIT, à valider. ExportData(chemin, format) ; format STEP
+                essayé en "stp" puis "step". Licence STEP requise.
 
-  CATIA V5
-    - Export via doc.ExportData(chemin, format). La chaîne de format du
-      STEP varie selon la version/les licences : on essaie "stp" puis
-      "step". STL/DWG/DXF : "stl"/"dwg"/"dxf".
-    - À tester : la sortie du STEP (licence STEP requise), et vérifier si
-      votre version attend le chemin AVEC ou SANS extension.
+  Inventor    : ÉCRIT, à valider. Traducteurs repérés par GUID puis
+                DisplayName ; export via SaveCopyAs.
 
-  Inventor
-    - Traducteurs repérés d'abord par GUID (ClassIdString), puis par
-      DisplayName en repli. Export via SaveCopyAs + TranslationContext
-      (kFileBrowseIOMechanism = 13059) + DataMedium.
-    - À vérifier : les GUID des traducteurs DWG/DXF selon votre version,
-      et la présence effective des traducteurs STEP/STL/DWG/DXF dans
-      ApplicationAddIns.
-
-  PTC Creo
-    - Piloté via la VB API (Object TOOLKIT, gratuite, livrée avec Creo).
-      PRÉREQUIS : Creo doit être DÉJÀ LANCÉ (connexion asynchrone à la
-      session) et la VB API installée/enregistrée.
-    - Les ProgID de la coclasse de connexion varient : plusieurs sont
-      tentés (pfcls.CCpfcAsyncConnection, ...). À AJUSTER selon votre
-      installation.
-    - Export via model.Export(chemin, instructions) avec les instructions
-      STEP3D / STLBinary / DWG / DXF.
-    - Alternative plus robuste si la VB API pose problème : J-Link (Java).
+  PTC Creo    : ÉCRIT, à valider. VB API (Object TOOLKIT, gratuite). Creo
+                doit être DÉJÀ LANCÉ et la VB API installée. ProgID de
+                connexion variables selon la version (plusieurs tentés).
 
 ----------------------------------------------------------------------
  DÉPANNAGE
 ----------------------------------------------------------------------
-  - « No module named win32com » : installez pywin32 (voir Prérequis).
-  - DISP_E_TYPEMISMATCH persistant : lancez le script en console pour
-    voir quelle convention a été retenue dans le journal.
-  - Le logiciel demande une boîte de dialogue : les handlers désactivent
-    les alertes quand c'est possible ; si un dialogue bloque, traitez ce
+  - La fenêtre ne s'ouvre pas : lancez « py -3 convertisseur_gui.py »
+    dans une invite de commandes pour voir l'erreur. « No module named
+    win32com » -> installez pywin32. « No module named tkinter » ->
+    réinstallez Python depuis python.org (tkinter inclus).
+  - Un logiciel affiche une boîte de dialogue bloquante : traitez ce
     fichier seul pour identifier la cause.
   - Rien ne s'exporte : vérifiez que le fichier n'est pas déjà ouvert et
     verrouillé, et que la licence d'export (ex. STEP CATIA) est présente.
+  - Un « KO » dans le journal indique le format et le message d'erreur
+    exact : transmettez-le pour diagnostic.
 
 ----------------------------------------------------------------------
  APPROCHE
