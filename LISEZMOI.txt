@@ -29,12 +29,14 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
 ----------------------------------------------------------------------
  UTILISATION — INTERFACE GRAPHIQUE (recommandé)
 ----------------------------------------------------------------------
-  1. Double-cliquez sur « Convertisseur_CAO.bat ». Une fenêtre s'ouvre.
+  1. Double-cliquez sur « Convertisseur_CAO.bat ». Un écran d'accueil
+     propose deux outils : « Conversion » et « Renommage » (à venir).
+     Cliquez « Conversion ». (Le bouton « ‹ Accueil » y ramène.)
   2. « Ajouter des fichiers… » : sélectionnez vos fichiers depuis leur
      emplacement (multi-sélection possible). Ou « Ajouter un dossier… ».
   3. Cochez les formats voulus, dans le cadre correspondant :
        - Pièces        : STEP, STL
-       - Assemblages   : STEP, STL   (cadre séparé)
+       - Assemblages   : STEP, Pièce (assemblage -> fichier .sldprt)
        - Mises en plan : DWG, DXF, PDF
      Les cadres sans fichier concerné sont grisés automatiquement. Les
      cases STEP/STL des « Pièces » et des « Assemblages » sont
@@ -76,10 +78,16 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
       Pièces
         .sldprt / .CATPart / .ipt / .prt . . . . . . . -> STEP + STL
       Assemblages
-        .sldasm / .CATProduct / .iam / .asm  . . . . . -> STEP + STL
+        .sldasm / .CATProduct / .iam / .asm  . . . . . -> STEP + Pièce
       Mises en plan
         .slddrw / .CATDrawing / .idw / .drw . . . . . . -> DWG + DXF + PDF
       (Creo : fichiers versionnés « .prt.3 », « .asm.12 » gérés.)
+
+      « Pièce » = enregistrer l'assemblage sous forme de fichier pièce
+      (.sldprt sous SolidWorks). Cette cible n'est prise en charge que
+      pour SolidWorks ; sur les autres logiciels elle est signalée « non
+      prise en charge » dans le bilan.
+      Après conversion, chaque document ouvert est refermé.
 
 ----------------------------------------------------------------------
  ÉTAT PAR LOGICIEL
@@ -89,13 +97,11 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
                 les arguments Errors/Warnings de OpenDoc6 et SaveAs).
                 Restent à valider : assemblage, mise en plan (DWG/DXF/PDF).
 
-                NOTE assemblage -> STL : si le STL d'un assemblage échoue,
-                c'est en général une boîte de dialogue SolidWorks invisible
-                en mode silencieux (« enregistrer tous les composants dans
-                un seul fichier »). À régler UNE FOIS dans SolidWorks :
-                Outils > Options > Exportation > STL > cocher « Enregistrer
-                tous les composants d'un assemblage dans un seul fichier ».
-                Le STEP d'assemblage, lui, ne pose pas ce souci.
+                Assemblages : export en STEP et en « Pièce » (.sldprt).
+                Les documents sont refermés après conversion.
+                Note : l'enregistrement d'un assemblage en pièce peut, selon
+                la version, ouvrir une boîte d'options SolidWorks ; à valider
+                sur un vrai assemblage.
 
   CATIA V5    : ÉCRIT, à valider. ExportData(chemin, format) ; format STEP
                 essayé en "stp" puis "step". Licence STEP requise.

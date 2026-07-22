@@ -51,9 +51,10 @@ def _fmt_duration(seconds):
 
 
 class App(ttk.Frame):
-    def __init__(self, master):
+    def __init__(self, master, controller=None):
         super().__init__(master, padding=10)
         self.master = master
+        self.controller = controller
         self.grid(sticky="nsew")
         master.columnconfigure(0, weight=1)
         master.rowconfigure(0, weight=1)
@@ -77,6 +78,16 @@ class App(ttk.Frame):
     # ------------------------------------------------------------------ UI
     def _build(self):
         r = 0
+        if self.controller is not None:
+            header = ttk.Frame(self)
+            header.grid(row=r, column=0, sticky="ew", pady=(0, 6))
+            self.back_btn = ttk.Button(header, text="‹ Accueil",
+                                       command=self._go_home)
+            self.back_btn.pack(side="left")
+            ttk.Label(header, text="   Conversion CAO/DAO",
+                      font=("", 11, "bold")).pack(side="left")
+            r += 1
+
         bar = ttk.Frame(self)
         bar.grid(row=r, column=0, sticky="ew")
         ttk.Button(bar, text="Ajouter des fichiers…",
@@ -201,6 +212,15 @@ class App(ttk.Frame):
         self.log_text.configure(yscrollcommand=lsb.set)
 
         self._update_naming_preview()
+
+    def _go_home(self):
+        busy = self._worker is not None and self._worker.is_alive()
+        if busy:
+            messagebox.showinfo("Conversion en cours",
+                                "Attendez la fin de la conversion.")
+            return
+        if self.controller is not None:
+            self.controller.show_home()
 
     # ------------------------------------------------------------- actions
     def add_files(self):
@@ -461,15 +481,103 @@ class App(ttk.Frame):
         self.log_text.configure(state="disabled")
 
 
+class HomeFrame(ttk.Frame):
+    """Écran d'accueil : choix entre Conversion et Renommage."""
+    def __init__(self, master, controller):
+        super().__init__(master, padding=30)
+        self.grid(sticky="nsew")
+        master.columnconfigure(0, weight=1)
+        master.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)
+
+        ttk.Label(self, text="Outils CAO/DAO",
+                  font=("", 18, "bold")).grid(row=0, column=0, pady=(10, 4))
+        ttk.Label(self, text="Que voulez-vous faire ?",
+                  foreground="#555").grid(row=1, column=0, pady=(0, 24))
+
+        cards = ttk.Frame(self)
+        cards.grid(row=2, column=0)
+
+        conv = ttk.Frame(cards, padding=16, relief="ridge", borderwidth=1)
+        conv.grid(row=0, column=0, padx=12)
+        ttk.Label(conv, text="Conversion",
+                  font=("", 13, "bold")).pack(pady=(0, 6))
+        ttk.Label(conv, text="Convertir par lot en STEP, STL,\n"
+                             "DWG, DXF, PDF ou fichier pièce.",
+                  justify="center", foreground="#555").pack(pady=(0, 12))
+        ttk.Button(conv, text="Ouvrir la conversion",
+                   command=controller.show_conversion).pack()
+
+        ren = ttk.Frame(cards, padding=16, relief="ridge", borderwidth=1)
+        ren.grid(row=0, column=1, padx=12)
+        ttk.Label(ren, text="Renommage",
+                  font=("", 13, "bold")).pack(pady=(0, 6))
+        ttk.Label(ren, text="Renommer des fichiers par lot.\n(À venir.)",
+                  justify="center", foreground="#555").pack(pady=(0, 12))
+        ttk.Button(ren, text="Ouvrir le renommage",
+                   command=controller.show_rename).pack()
+
+
+class RenameFrame(ttk.Frame):
+    """Écran de renommage — réservé pour plus tard."""
+    def __init__(self, master, controller):
+        super().__init__(master, padding=30)
+        self.controller = controller
+        self.grid(sticky="nsew")
+        master.columnconfigure(0, weight=1)
+        master.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)
+
+        header = ttk.Frame(self)
+        header.grid(row=0, column=0, sticky="ew")
+        ttk.Button(header, text="‹ Accueil",
+                   command=controller.show_home).pack(side="left")
+        ttk.Label(header, text="   Renommage",
+                  font=("", 11, "bold")).pack(side="left")
+
+        ttk.Label(self, text="Fonction de renommage à venir.",
+                  font=("", 13)).grid(row=1, column=0, pady=40)
+        ttk.Label(self, text="On en reparle : dis-moi les règles de "
+                             "renommage souhaitées.",
+                  foreground="#555").grid(row=2, column=0)
+
+
+class Controller(object):
+    """Aiguille entre l'accueil, la conversion et le renommage."""
+    GEOMETRY = {"home": "560x360", "conversion": "820x820", "rename": "560x360"}
+
+    def __init__(self, root):
+        self.root = root
+        self.show_home()
+
+    def _clear(self):
+        for w in self.root.winfo_children():
+            w.destroy()
+
+    def show_home(self):
+        self._clear()
+        self.root.geometry(self.GEOMETRY["home"])
+        HomeFrame(self.root, self)
+
+    def show_conversion(self):
+        self._clear()
+        self.root.geometry(self.GEOMETRY["conversion"])
+        App(self.root, controller=self)
+
+    def show_rename(self):
+        self._clear()
+        self.root.geometry(self.GEOMETRY["rename"])
+        RenameFrame(self.root, self)
+
+
 def main():
     root = tk.Tk()
-    root.title("Convertisseur CAO/DAO par lot")
-    root.geometry("820x780")
+    root.title("Outils CAO/DAO")
     try:
         ttk.Style().theme_use("vista")
     except tk.TclError:
         pass
-    App(root)
+    Controller(root)
     root.mainloop()
     return 0
 

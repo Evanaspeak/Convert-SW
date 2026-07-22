@@ -55,9 +55,11 @@ ROUTES = {
 }
 
 # Formats proposés par nature (valeurs par défaut pour la CLI et l'interface).
+# "part" comme cible = enregistrer un ASSEMBLAGE sous forme de fichier pièce
+# (extension native du logiciel, ex. .sldprt pour SolidWorks).
 TARGETS = {
     "part":     ["step", "stl"],
-    "assembly": ["step", "stl"],
+    "assembly": ["step", "part"],
     "drawing":  ["dwg", "dxf", "pdf"],
 }
 
@@ -73,6 +75,7 @@ KIND_LABELS = {
 TARGET_LABELS = {
     "step": "STEP (.step)",
     "stl":  "STL (.stl)",
+    "part": "Pièce (fichier natif)",
     "dwg":  "DWG (.dwg)",
     "dxf":  "DXF (.dxf)",
     "pdf":  "PDF (.pdf)",
@@ -141,14 +144,20 @@ class ExportOptions(object):
         self.suffix = sanitize_affix(suffix)
 
 
-def output_path(src, target, opts=None):
-    """Chemin de sortie pour un fichier source et un format cible."""
+def output_path(src, target, opts=None, ext=None):
+    """Chemin de sortie pour un fichier source et un format cible.
+
+    ext : extension réelle du fichier de sortie si elle diffère du nom de
+    la cible (cas de "part" -> .sldprt / .CATPart / .ipt / .prt). Le
+    sous-dossier, lui, garde le nom de la cible (« PART »).
+    """
     if opts is None:
         opts = ExportOptions()
     base = opts.dest_dir if opts.dest_dir else export_dir_for(src)
     folder = os.path.join(base, target.upper()) if opts.subfolders else base
     os.makedirs(folder, exist_ok=True)
-    name = "%s%s%s.%s" % (opts.prefix, clean_stem(src), opts.suffix, target)
+    real_ext = ext if ext else target
+    name = "%s%s%s.%s" % (opts.prefix, clean_stem(src), opts.suffix, real_ext)
     return os.path.join(folder, name)
 
 
@@ -210,6 +219,7 @@ class SolidWorksHandler(Handler):
     _SILENT_OPEN = 1                                        # swOpenDocOptions_Silent
     _VER_CURRENT = 0                                        # swSaveAsCurrentVersion
     _SAVE_SILENT_COPY = 1 | 2                              # Silent | Copy
+    PART_EXT = "sldprt"   # cible "part" : assemblage -> fichier pièce
 
     def start(self):
         import win32com.client
@@ -311,19 +321,37 @@ class SolidWorksHandler(Handler):
             pass
 
         for t in targets:
-            out = output_path(src, t, opts)
+            ext_out = self.PART_EXT if t == "part" else t
+            out = output_path(src, t, opts, ext=ext_out)
             try:
                 ok = self._save(doc, out) and os.path.exists(out)
                 results.append((t, out, ok, "" if ok else "SaveAs a échoué"))
             except Exception as e:
                 results.append((t, out, False, str(e)))
 
+        # Fermer le document converti (l'utilisateur l'a demandé).
+        self._close_doc(doc, title)
+        return results
+
+    def _close_doc(self, doc, title):
+        # On tente plusieurs formes de titre : SolidWorks attend le titre
+        # exact de la fenêtre pour CloseDoc.
+        names = []
+        if title:
+            names.append(title)
         try:
-            if title:
-                self.app.CloseDoc(title)
+            gt = doc.GetTitle()
+            if gt and gt not in names:
+                names.append(gt)
         except Exception:
             pass
-        return results
+        for name in names:
+            try:
+                self.app.CloseDoc(name)
+                return True
+            except Exception:
+                continue
+        return False
 
     def stop(self):
         pass
@@ -367,6 +395,11 @@ class CatiaHandler(Handler):
             return results
 
         for t in targets:
+            if t == "part":
+                out = output_path(src, t, opts, ext="CATPart")
+                results.append((t, out, False,
+                                "export 'Pièce' non pris en charge ici (SolidWorks uniquement)"))
+                continue
             out = output_path(src, t, opts)
             ok, msg = False, ""
             for fmt in self._FORMATS.get(t, [t]):
@@ -452,6 +485,11 @@ class InventorHandler(Handler):
 
         to = self.app.TransientObjects
         for t in targets:
+            if t == "part":
+                out = output_path(src, t, opts, ext="ipt")
+                results.append((t, out, False,
+                                "export 'Pièce' non pris en charge ici (SolidWorks uniquement)"))
+                continue
             out = output_path(src, t, opts)
             addin = self._translator(t)
             if addin is None:
@@ -549,6 +587,11 @@ class CreoHandler(Handler):
             return results
 
         for t in targets:
+            if t == "part":
+                out = output_path(src, t, opts, ext="prt")
+                results.append((t, out, False,
+                                "export 'Pièce' non pris en charge ici (SolidWorks uniquement)"))
+                continue
             out = output_path(src, t, opts)
             try:
                 model.Export(out, self._instructions(t))
