@@ -1,0 +1,123 @@
+======================================================================
+ CONVERTISSEUR CAO/DAO PAR LOT  —  LISEZMOI
+======================================================================
+
+But : convertir par lot, en local et gratuitement, des pièces /
+assemblages en STEP + STL et des mises en plan en DWG + DXF, en
+pilotant les logiciels de CAO déjà installés via leur automation COM
+(pywin32). Aucun convertisseur payant, aucun envoi de fichier en ligne.
+
+----------------------------------------------------------------------
+ FICHIERS DU PROJET (à placer ensemble, p. ex. dans C:\CAD)
+----------------------------------------------------------------------
+  convertisseur_cao.py  Script principal (détection, regroupement,
+                        pilotage des logiciels, export).
+  Convertir_ici.bat     Lanceur glisser-déposer.
+  menu_contextuel.reg   Entrées de menu clic droit (chemin à éditer).
+  LISEZMOI.txt          Ce fichier.
+
+----------------------------------------------------------------------
+ PRÉREQUIS
+----------------------------------------------------------------------
+  - Windows.
+  - Python 3 (64 bits) + pywin32 :  py -3 -m pip install pywin32
+  - Les logiciels de CAO concernés installés sur la machine.
+
+----------------------------------------------------------------------
+ UTILISATION
+----------------------------------------------------------------------
+  Glisser-déposer (recommandé pour un lot) :
+      Sélectionnez vos fichiers, glissez-les sur « Convertir_ici.bat ».
+      -> tous les fichiers sont envoyés en une seule fois, chaque
+         logiciel n'est lancé qu'une fois.
+
+  Ligne de commande :
+      py -3 convertisseur_cao.py fichier1.sldprt dossier\  ...
+      py -3 convertisseur_cao.py --dry-run *.CATPart   (simulation)
+      py -3 convertisseur_cao.py --help
+
+  Clic droit (un fichier à la fois) :
+      Éditez menu_contextuel.reg (remplacez C:\CAD par votre dossier),
+      double-cliquez pour l'importer.
+
+  Un dossier passé en argument est parcouru récursivement (les
+  sous-dossiers « Export » et cachés sont ignorés).
+
+----------------------------------------------------------------------
+ SORTIES
+----------------------------------------------------------------------
+  Chaque export est rangé dans un sous-dossier « Export » créé à côté
+  du fichier source. Un journal « conversion.log » y est ajouté.
+
+  Correspondances :
+      .sldprt/.sldasm . . . . . . . SolidWorks -> STEP + STL
+      .slddrw . . . . . . . . . . . SolidWorks -> DWG + DXF
+      .CATPart/.CATProduct  . . . . CATIA V5   -> STEP + STL
+      .CATDrawing . . . . . . . . . CATIA V5   -> DWG + DXF
+      .ipt/.iam . . . . . . . . . . Inventor   -> STEP + STL
+      .idw  . . . . . . . . . . . . Inventor   -> DWG + DXF
+      .prt/.asm (y c. « .prt.3 »).  Creo       -> STEP + STL
+      .drw  . . . . . . . . . . . . Creo       -> DWG + DXF
+
+----------------------------------------------------------------------
+ ÉTAT PAR LOGICIEL  (À VALIDER SUR LA MACHINE)
+----------------------------------------------------------------------
+IMPORTANT : ce code n'a PAS pu être exécuté contre les vrais logiciels
+(développé hors Windows). La logique et les correctifs connus sont en
+place ; il reste à tester chaque logiciel sur une vraie pièce.
+
+  SolidWorks
+    - Correctif du DISP_E_TYPEMISMATCH : les arguments [out] Errors /
+      Warnings de OpenDoc6 et de SaveAs sont désormais passés comme des
+      VARIANT « byref » (VT_BYREF | VT_I4), et non comme des entiers.
+      C'est la cause classique de « argerr 4 ».
+    - _open et _save restent auto-adaptatives : elles essaient plusieurs
+      conventions (OpenDoc6 VARIANT -> OpenDoc6 entiers -> OpenDoc ;
+      Extension.SaveAs -> SaveAs3 -> Doc.SaveAs4 -> Doc.SaveAs3) et
+      mémorisent la première qui fonctionne.
+    - À tester : une pièce .sldprt réelle -> STEP + STL.
+
+  CATIA V5
+    - Export via doc.ExportData(chemin, format). La chaîne de format du
+      STEP varie selon la version/les licences : on essaie "stp" puis
+      "step". STL/DWG/DXF : "stl"/"dwg"/"dxf".
+    - À tester : la sortie du STEP (licence STEP requise), et vérifier si
+      votre version attend le chemin AVEC ou SANS extension.
+
+  Inventor
+    - Traducteurs repérés d'abord par GUID (ClassIdString), puis par
+      DisplayName en repli. Export via SaveCopyAs + TranslationContext
+      (kFileBrowseIOMechanism = 13059) + DataMedium.
+    - À vérifier : les GUID des traducteurs DWG/DXF selon votre version,
+      et la présence effective des traducteurs STEP/STL/DWG/DXF dans
+      ApplicationAddIns.
+
+  PTC Creo
+    - Piloté via la VB API (Object TOOLKIT, gratuite, livrée avec Creo).
+      PRÉREQUIS : Creo doit être DÉJÀ LANCÉ (connexion asynchrone à la
+      session) et la VB API installée/enregistrée.
+    - Les ProgID de la coclasse de connexion varient : plusieurs sont
+      tentés (pfcls.CCpfcAsyncConnection, ...). À AJUSTER selon votre
+      installation.
+    - Export via model.Export(chemin, instructions) avec les instructions
+      STEP3D / STLBinary / DWG / DXF.
+    - Alternative plus robuste si la VB API pose problème : J-Link (Java).
+
+----------------------------------------------------------------------
+ DÉPANNAGE
+----------------------------------------------------------------------
+  - « No module named win32com » : installez pywin32 (voir Prérequis).
+  - DISP_E_TYPEMISMATCH persistant : lancez le script en console pour
+    voir quelle convention a été retenue dans le journal.
+  - Le logiciel demande une boîte de dialogue : les handlers désactivent
+    les alertes quand c'est possible ; si un dialogue bloque, traitez ce
+    fichier seul pour identifier la cause.
+  - Rien ne s'exporte : vérifiez que le fichier n'est pas déjà ouvert et
+    verrouillé, et que la licence d'export (ex. STEP CATIA) est présente.
+
+----------------------------------------------------------------------
+ APPROCHE
+----------------------------------------------------------------------
+  100 % local et gratuit : on pilote les logiciels installés, aucun
+  fichier n'est envoyé vers un service tiers.
+======================================================================
