@@ -54,8 +54,9 @@ def create_desktop_shortcut():
     desktop = shell.SpecialFolders("Desktop")
     root = _app_root()
 
+    here = os.path.dirname(os.path.abspath(__file__))
     vbs = os.path.join(root, "Convertisseur_CAO.vbs")
-    lnk = os.path.join(desktop, "Convertisseur CAO.lnk")
+    lnk = os.path.join(desktop, "Convert-Rename.lnk")
     sc = shell.CreateShortcut(lnk)
     if os.path.exists(vbs):
         # cibler wscript.exe + le .vbs : le plus fiable (pas d'ambiguïté)
@@ -64,10 +65,13 @@ def create_desktop_shortcut():
         sc.Arguments = '"%s"' % vbs
     else:
         # repli : lanceur .bat dans le dossier DATA
-        sc.TargetPath = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                     "Convertisseur_CAO.bat")
+        sc.TargetPath = os.path.join(here, "Convertisseur_CAO.bat")
     sc.WorkingDirectory = root
-    sc.Description = "Convertisseur CAO/DAO par lot"
+    sc.Description = "Convert / Rename — CAO/DAO"
+    # icône personnalisée si présente
+    ico = os.path.join(here, "icone.ico")
+    if os.path.exists(ico):
+        sc.IconLocation = "%s,0" % ico
     sc.Save()
     return lnk
 
