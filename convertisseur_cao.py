@@ -783,14 +783,18 @@ def strip_accents(text):
 
 
 class RenameRules(object):
-    """Règles de renommage appliquées au NOM (sans l'extension)."""
-    def __init__(self, find="", replace="", case_sensitive=False,
+    """Règles de renommage appliquées au NOM (sans l'extension).
+
+    replacements : liste de couples (rechercher, remplacer_par). Les règles
+    sont appliquées successivement, dans l'ordre. Pour « supprimer », il
+    suffit d'un remplacement par une chaîne vide.
+    """
+    def __init__(self, replacements=None, case_sensitive=False,
                  prefix="", suffix="", case_mode="none",
                  spaces_to_underscore=False, remove_accents=False,
                  number_enabled=False, number_start=1, number_digits=3,
                  number_position="suffix", number_sep="_"):
-        self.find = find or ""
-        self.replace = replace or ""
+        self.replacements = list(replacements or [])
         self.case_sensitive = bool(case_sensitive)
         self.prefix = prefix or ""
         self.suffix = suffix or ""
@@ -814,15 +818,17 @@ def apply_rules(stem, index, rules):
     """Transforme un nom (sans extension) selon les règles. index = 0,1,2…"""
     s = stem
 
-    # 1) rechercher / remplacer
-    if rules.find:
+    # 1) rechercher / remplacer (plusieurs règles, dans l'ordre)
+    for find, replace in rules.replacements:
+        if not find:
+            continue
         if rules.case_sensitive:
-            s = s.replace(rules.find, rules.replace)
+            s = s.replace(find, replace)
         else:
-            s = re.sub(re.escape(rules.find), lambda _m: rules.replace,
+            s = re.sub(re.escape(find), lambda _m, r=replace: r,
                        s, flags=re.IGNORECASE)
 
-    # 2) casse
+    # 2) casse (sur le nom d'origine, pas sur le préfixe/suffixe)
     if rules.case_mode == "upper":
         s = s.upper()
     elif rules.case_mode == "lower":
@@ -830,26 +836,27 @@ def apply_rules(stem, index, rules):
     elif rules.case_mode == "capitalize":
         s = s.capitalize()
 
-    # 3) nettoyage
-    if rules.spaces_to_underscore:
-        s = s.replace(" ", "_")
-    if rules.remove_accents:
-        s = strip_accents(s)
-
-    # 4) préfixe / suffixe (texte littéral, non affecté par la casse)
-    s = "%s%s%s" % (rules.prefix, s, rules.suffix)
-
-    # 5) numérotation
+    # 3) assemblage : la numérotation se place À L'INTÉRIEUR, juste après
+    #    le préfixe ou juste avant le suffixe (jamais au-delà).
+    num = ""
     if rules.number_enabled:
         num = str(rules.number_start + index).zfill(rules.number_digits)
-        if rules.number_position == "prefix":
-            s = "%s%s%s" % (num, rules.number_sep, s)
-        else:
-            s = "%s%s%s" % (s, rules.number_sep, num)
+    if num and rules.number_position == "prefix":
+        core = "%s%s%s%s%s" % (rules.prefix, num, rules.number_sep, s, rules.suffix)
+    elif num:  # suffix
+        core = "%s%s%s%s%s" % (rules.prefix, s, rules.number_sep, num, rules.suffix)
+    else:
+        core = "%s%s%s" % (rules.prefix, s, rules.suffix)
+
+    # 4) nettoyage sur l'ENSEMBLE (donc aussi le préfixe/suffixe)
+    if rules.spaces_to_underscore:
+        core = core.replace(" ", "_")
+    if rules.remove_accents:
+        core = strip_accents(core)
 
     # sécurité : retirer les caractères interdits dans un nom de fichier
-    s = _BAD_NAME_CHARS.sub("", s)
-    return s
+    core = _BAD_NAME_CHARS.sub("", core)
+    return core
 
 
 def build_rename_plan(paths, rules):

@@ -68,11 +68,17 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
   1. Accueil > « Renommage ».
   2. Ajoutez des fichiers ou un dossier.
   3. Réglez les règles (combinables) :
-       - Rechercher / remplacer (avec option « respecter la casse ») ;
+       - Rechercher / remplacer : PLUSIEURS règles possibles (bouton
+         « + Ajouter une règle »), appliquées dans l'ordre. Case
+         « supprimer » = retirer le texte trouvé. Case « respecter la
+         casse » globale.
        - Préfixe / suffixe ;
        - Casse (MAJUSCULES / minuscules / Première lettre), espaces -> _,
-         retrait des accents ;
+         retrait des accents. Le nettoyage s'applique à TOUT le nom,
+         préfixe et suffixe compris.
        - Numérotation auto (début, nombre de chiffres, préfixe/suffixe).
+         Le numéro se place À L'INTÉRIEUR : juste après le préfixe ou
+         juste avant le suffixe.
   4. L'APERÇU (ancien nom -> nouveau nom) se met à jour en direct.
      Les conflits sont signalés en rouge : « doublon » (deux fichiers
      auraient le même nom), « existe déjà », « nom vide ». Tant qu'il
@@ -80,8 +86,9 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
   5. « Appliquer le renommage » : confirmation, puis renommage en deux
      passes (gère les échanges de noms). Un bilan s'affiche.
 
-  Ordre d'application des règles : rechercher/remplacer -> casse ->
-  nettoyage -> préfixe/suffixe -> numérotation.
+  Ordre d'application : remplacements (dans l'ordre) -> casse ->
+  assemblage préfixe + [numéro] + nom + [numéro] + suffixe -> nettoyage
+  (espaces/accents) sur l'ensemble.
 
 ----------------------------------------------------------------------
  UTILISATION — SANS FENÊTRE (optionnel)

@@ -512,7 +512,8 @@ class HomeFrame(ttk.Frame):
         ren.grid(row=0, column=1, padx=12)
         ttk.Label(ren, text="Renommage",
                   font=("", 13, "bold")).pack(pady=(0, 6))
-        ttk.Label(ren, text="Renommer des fichiers par lot.\n(À venir.)",
+        ttk.Label(ren, text="Renommer des fichiers par lot\n"
+                             "(préfixe, remplacement, numéro…).",
                   justify="center", foreground="#555").pack(pady=(0, 12))
         ttk.Button(ren, text="Ouvrir le renommage",
                    command=controller.show_rename).pack()
@@ -578,27 +579,32 @@ class RenameFrame(ttk.Frame):
         # --- Règles ---------------------------------------------------
         rules = ttk.Frame(self)
         rules.grid(row=2, column=0, sticky="ew", pady=(8, 6))
-        for c in range(4):
-            rules.columnconfigure(c, weight=1)
+        rules.columnconfigure(0, weight=1)
 
-        # rechercher / remplacer
+        # rechercher / remplacer : liste dynamique de règles
         fr = ttk.LabelFrame(rules, text="Rechercher / remplacer", padding=8)
-        fr.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
-        fr.columnconfigure(1, weight=1)
-        ttk.Label(fr, text="Rechercher :").grid(row=0, column=0, sticky="w")
-        self.find_var = self._var("str", "")
-        ttk.Entry(fr, textvariable=self.find_var).grid(row=0, column=1, sticky="ew")
-        ttk.Label(fr, text="Remplacer :").grid(row=1, column=0, sticky="w")
-        self.replace_var = self._var("str", "")
-        ttk.Entry(fr, textvariable=self.replace_var).grid(row=1, column=1, sticky="ew")
+        fr.grid(row=0, column=0, sticky="ew")
+        fr.columnconfigure(0, weight=1)
+        self.repl_container = ttk.Frame(fr)
+        self.repl_container.grid(row=0, column=0, sticky="ew")
+        self.repl_container.columnconfigure(0, weight=1)
+        self.repl_rows = []
+        rowact = ttk.Frame(fr)
+        rowact.grid(row=1, column=0, sticky="w", pady=(4, 0))
+        ttk.Button(rowact, text="+ Ajouter une règle",
+                   command=lambda: self._add_repl_row()).pack(side="left")
         self.case_sensitive_var = self._var("bool", False)
-        ttk.Checkbutton(fr, text="Respecter la casse",
-                        variable=self.case_sensitive_var).grid(
-            row=2, column=0, columnspan=2, sticky="w")
+        ttk.Checkbutton(rowact, text="Respecter la casse",
+                        variable=self.case_sensitive_var).pack(side="left", padx=(12, 0))
 
-        # préfixe / suffixe
-        ps = ttk.LabelFrame(rules, text="Préfixe / suffixe", padding=8)
-        ps.grid(row=0, column=1, sticky="nsew", padx=4)
+        # deuxième rangée : préfixe/suffixe | casse | numérotation
+        row2 = ttk.Frame(rules)
+        row2.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        for c in range(3):
+            row2.columnconfigure(c, weight=1)
+
+        ps = ttk.LabelFrame(row2, text="Préfixe / suffixe", padding=8)
+        ps.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
         ps.columnconfigure(1, weight=1)
         ttk.Label(ps, text="Préfixe :").grid(row=0, column=0, sticky="w")
         self.prefix_var = self._var("str", "")
@@ -607,9 +613,8 @@ class RenameFrame(ttk.Frame):
         self.suffix_var = self._var("str", "")
         ttk.Entry(ps, textvariable=self.suffix_var).grid(row=1, column=1, sticky="ew")
 
-        # casse / nettoyage
-        cc = ttk.LabelFrame(rules, text="Casse / nettoyage", padding=8)
-        cc.grid(row=0, column=2, sticky="nsew", padx=4)
+        cc = ttk.LabelFrame(row2, text="Casse / nettoyage", padding=8)
+        cc.grid(row=0, column=1, sticky="nsew", padx=4)
         cc.columnconfigure(0, weight=1)
         self.case_mode_var = self._var("str", engine.CASE_LABELS["none"])
         ttk.Combobox(cc, textvariable=self.case_mode_var, state="readonly",
@@ -622,9 +627,8 @@ class RenameFrame(ttk.Frame):
         ttk.Checkbutton(cc, text="Retirer les accents",
                         variable=self.accents_var).grid(row=2, column=0, sticky="w")
 
-        # numérotation
-        nb = ttk.LabelFrame(rules, text="Numérotation", padding=8)
-        nb.grid(row=0, column=3, sticky="nsew", padx=(4, 0))
+        nb = ttk.LabelFrame(row2, text="Numérotation", padding=8)
+        nb.grid(row=0, column=2, sticky="nsew", padx=(4, 0))
         nb.columnconfigure(1, weight=1)
         self.number_enabled_var = self._var("bool", False)
         ttk.Checkbutton(nb, text="Activer", variable=self.number_enabled_var).grid(
@@ -674,6 +678,58 @@ class RenameFrame(ttk.Frame):
         self.apply_btn = ttk.Button(bottom, text="Appliquer le renommage",
                                     command=self.apply_rename)
         self.apply_btn.grid(row=0, column=1, sticky="e")
+
+        # une règle rechercher/remplacer au départ (après la création de tout)
+        self._add_repl_row()
+
+    # ------------------------------- règles rechercher/remplacer (dynamiques)
+    def _add_repl_row(self, find="", replace="", delete=False):
+        idx = len(self.repl_rows)
+        row = ttk.Frame(self.repl_container)
+        row.grid(row=idx, column=0, sticky="ew", pady=1)
+        row.columnconfigure(1, weight=1)
+        row.columnconfigure(3, weight=1)
+
+        fv = tk.StringVar(value=find)
+        rv = tk.StringVar(value=replace)
+        dv = tk.BooleanVar(value=delete)
+        for v in (fv, rv, dv):
+            v.trace_add("write", lambda *_: self._refresh_preview())
+
+        ttk.Label(row, text="Rechercher :").grid(row=0, column=0, sticky="w")
+        ttk.Entry(row, textvariable=fv).grid(row=0, column=1, sticky="ew", padx=(2, 8))
+        ttk.Label(row, text="Remplacer :").grid(row=0, column=2, sticky="w")
+        e_repl = ttk.Entry(row, textvariable=rv)
+        e_repl.grid(row=0, column=3, sticky="ew", padx=(2, 8))
+
+        entry = {"row": row, "fv": fv, "rv": rv, "dv": dv, "e_repl": e_repl}
+
+        def toggle():
+            e_repl.configure(state="disabled" if dv.get() else "normal")
+            self._refresh_preview()
+
+        ttk.Checkbutton(row, text="supprimer", variable=dv,
+                        command=toggle).grid(row=0, column=4, sticky="w")
+        ttk.Button(row, text="✕", width=2,
+                   command=lambda: self._remove_repl_row(entry)).grid(
+            row=0, column=5, sticky="w", padx=(6, 0))
+
+        self.repl_rows.append(entry)
+        toggle()
+
+    def _remove_repl_row(self, entry):
+        if len(self.repl_rows) <= 1:
+            # on garde toujours une ligne : on la vide plutôt que la supprimer
+            entry["fv"].set("")
+            entry["rv"].set("")
+            entry["dv"].set(False)
+            entry["e_repl"].configure(state="normal")
+            return
+        entry["row"].destroy()
+        self.repl_rows.remove(entry)
+        for i, e in enumerate(self.repl_rows):
+            e["row"].grid_configure(row=i)
+        self._refresh_preview()
 
     # ------------------------------------------------------------- fichiers
     def add_files(self):
@@ -733,8 +789,13 @@ class RenameFrame(ttk.Frame):
                 case_mode = m
                 break
         pos = "prefix" if self.number_position_var.get() == "préfixe" else "suffix"
+        replacements = []
+        for e in self.repl_rows:
+            find = e["fv"].get()
+            replace = "" if e["dv"].get() else e["rv"].get()
+            replacements.append((find, replace))
         return engine.RenameRules(
-            find=self.find_var.get(), replace=self.replace_var.get(),
+            replacements=replacements,
             case_sensitive=self.case_sensitive_var.get(),
             prefix=self.prefix_var.get(), suffix=self.suffix_var.get(),
             case_mode=case_mode,
