@@ -40,7 +40,12 @@ if errorlevel 1 (
 
 echo.
 echo ====================================================================
-echo  OK : l'executable est ici -> DATA\dist\Convert-Rename.exe
+echo  OK : executable cree dans le sous-dossier  dist
+echo  Fichier : Convert-Rename.exe
 echo  Vous pouvez le copier ou vous voulez et le distribuer tel quel.
 echo ====================================================================
+if exist "%~dp0dist\Convert-Rename.exe" (
+    echo  Ouverture du dossier dist...
+    explorer "%~dp0dist"
+)
 pause
