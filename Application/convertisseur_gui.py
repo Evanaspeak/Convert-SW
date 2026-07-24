@@ -37,6 +37,41 @@ _FILE_TYPES = [
 ]
 
 
+def _app_root():
+    """Dossier racine (parent du dossier « Application »)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    return os.path.dirname(here)
+
+
+def create_desktop_shortcut():
+    """Crée un raccourci « Convertisseur CAO » sur le bureau (Windows).
+
+    Le raccourci vise le lanceur .vbs (ouverture sans console). Renvoie le
+    chemin du raccourci créé. Lève une exception en cas d'échec.
+    """
+    import win32com.client  # pywin32
+    shell = win32com.client.Dispatch("WScript.Shell")
+    desktop = shell.SpecialFolders("Desktop")
+    root = _app_root()
+
+    vbs = os.path.join(root, "Convertisseur_CAO.vbs")
+    lnk = os.path.join(desktop, "Convertisseur CAO.lnk")
+    sc = shell.CreateShortcut(lnk)
+    if os.path.exists(vbs):
+        # cibler wscript.exe + le .vbs : le plus fiable (pas d'ambiguïté)
+        windir = os.environ.get("WINDIR", r"C:\Windows")
+        sc.TargetPath = os.path.join(windir, "System32", "wscript.exe")
+        sc.Arguments = '"%s"' % vbs
+    else:
+        # repli : lanceur .bat dans le dossier Application
+        sc.TargetPath = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                     "Convertisseur_CAO.bat")
+    sc.WorkingDirectory = root
+    sc.Description = "Convertisseur CAO/DAO par lot"
+    sc.Save()
+    return lnk
+
+
 def _fmt_duration(seconds):
     if seconds is None or seconds < 0:
         return "—"
@@ -619,6 +654,21 @@ class HomeFrame(ttk.Frame):
                   justify="center", foreground="#555").pack(pady=(0, 12))
         ttk.Button(ren, text="Ouvrir le renommage",
                    command=controller.show_rename).pack()
+
+        ttk.Button(self, text="Créer un raccourci sur le bureau",
+                   command=self._make_shortcut).grid(row=3, column=0,
+                                                     pady=(24, 0))
+
+    def _make_shortcut(self):
+        try:
+            lnk = create_desktop_shortcut()
+            messagebox.showinfo("Raccourci créé",
+                                "Raccourci ajouté sur le bureau :\n%s" % lnk)
+        except Exception as e:
+            messagebox.showerror(
+                "Échec",
+                "Impossible de créer le raccourci.\n%s\n\n"
+                "(Nécessite Windows avec pywin32.)" % e)
 
 
 _STATUS_TEXT = {

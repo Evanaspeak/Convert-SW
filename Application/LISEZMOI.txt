@@ -8,17 +8,24 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
 (pywin32). Aucun convertisseur payant, aucun envoi de fichier en ligne.
 
 ----------------------------------------------------------------------
- FICHIERS DU PROJET (à placer ensemble dans un même dossier)
+ STRUCTURE DU DOSSIER
 ----------------------------------------------------------------------
-  Convertisseur_CAO.vbs   >>> DOUBLE-CLIC pour ouvrir l'appli (SANS
-                          fenêtre de commande) <<<
-  Convertisseur_CAO.bat   Même chose, mais affiche une console (utile pour
-                          voir une erreur au démarrage).
-  convertisseur_gui.py    Interface graphique (fenêtre).
-  convertisseur_cao.py    Moteur (routage + pilotage des logiciels).
-  Convertir_ici.bat       Lanceur glisser-déposer (optionnel).
-  menu_contextuel.reg     Entrées de menu clic droit (optionnel).
-  LISEZMOI.txt            Ce fichier.
+  Dossier principal :
+    Convertisseur_CAO.vbs   >>> DOUBLE-CLIC pour ouvrir l'appli (SANS
+                            fenêtre de commande) <<<
+    Application\            Dossier de fonctionnement (voir ci-dessous).
+
+  Application\  (fichiers internes, pas besoin d'y toucher) :
+    convertisseur_gui.py    Interface graphique (fenêtre).
+    convertisseur_cao.py    Moteur (routage + pilotage des logiciels).
+    Convertisseur_CAO.bat   Lancement avec console (voir une erreur).
+    Convertir_ici.bat       Lanceur glisser-déposer (optionnel).
+    menu_contextuel.reg     Entrées de menu clic droit (optionnel).
+    LISEZMOI.txt            Ce fichier.
+
+  Astuce : depuis l'écran d'accueil de l'appli, le bouton « Créer un
+  raccourci sur le bureau » ajoute une icône de lancement sur le bureau.
+  Gardez le .vbs et le dossier Application ensemble (ne les séparez pas).
 
 ----------------------------------------------------------------------
  PRÉREQUIS
@@ -117,11 +124,13 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
 ----------------------------------------------------------------------
  UTILISATION — SANS FENÊTRE (optionnel)
 ----------------------------------------------------------------------
-  Glisser-déposer :
-      Glissez vos fichiers sur « Convertir_ici.bat » (exporte tous les
-      formats par défaut, à côté des fichiers).
+  (Ces lanceurs sont dans le dossier « Application ».)
 
-  Ligne de commande :
+  Glisser-déposer :
+      Glissez vos fichiers sur « Application\Convertir_ici.bat » (exporte
+      tous les formats par défaut, à côté des fichiers).
+
+  Ligne de commande (depuis le dossier « Application ») :
       py -3 convertisseur_cao.py fichier.sldprt dossier\ ...
       py -3 convertisseur_cao.py --dry-run *.CATPart   (simulation)
       py -3 convertisseur_cao.py --help
@@ -175,7 +184,8 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
 ----------------------------------------------------------------------
  DÉPANNAGE
 ----------------------------------------------------------------------
-  - La fenêtre ne s'ouvre pas : lancez « py -3 convertisseur_gui.py »
+  - La fenêtre ne s'ouvre pas : dans le dossier « Application », lancez
+    « Convertisseur_CAO.bat » (ou « py -3 convertisseur_gui.py »)
     dans une invite de commandes pour voir l'erreur. « No module named
     win32com » -> installez pywin32. « No module named tkinter » ->
     réinstallez Python depuis python.org (tkinter inclus).

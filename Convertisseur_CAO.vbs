@@ -3,26 +3,25 @@
 '  Lance l'interface graphique SANS aucune fenêtre de commande.
 '  >>> Double-cliquez sur CE fichier pour ouvrir l'application. <<<
 '
-'  Utilise « pyw » (Python fenêtre, sans console). En cas de souci,
-'  utilisez Convertisseur_CAO.bat qui affiche les erreurs éventuelles.
+'  Les fichiers de fonctionnement sont dans le sous-dossier « Application ».
+'  Utilise « pyw » (Python fenêtre, sans console). En cas de souci, lancez
+'  Application\Convertisseur_CAO.bat qui affiche les erreurs éventuelles.
 ' ===================================================================
 
 Option Explicit
-Dim sh, fso, scriptDir, target, cmd
+Dim sh, fso, scriptDir, appDir, target
 Set sh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 
-' Dossier de ce script
 scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
-sh.CurrentDirectory = scriptDir
-target = fso.BuildPath(scriptDir, "convertisseur_gui.py")
+appDir = fso.BuildPath(scriptDir, "Application")
+target = fso.BuildPath(appDir, "convertisseur_gui.py")
+sh.CurrentDirectory = appDir
 
 ' pyw = lanceur Python "fenêtre" (pas de console). 0 = fenêtre cachée.
-cmd = "pyw """ & target & """"
 On Error Resume Next
-sh.Run cmd, 0, False
+sh.Run "pyw """ & target & """", 0, False
 If Err.Number <> 0 Then
-    ' Repli : pythonw
     Err.Clear
     sh.Run "pythonw """ & target & """", 0, False
 End If
