@@ -141,7 +141,8 @@ class ExportOptions(object):
     """
     def __init__(self, dest_dir=None, subfolders=False, prefix="", suffix="",
                  number_mode="none", number_start=1, number_digits=3,
-                 number_position="suffix", number_sep="_", category_text=None):
+                 number_position="suffix", number_sep="_", category_text=None,
+                 category_position="prefix"):
         self.dest_dir = dest_dir or None
         self.subfolders = bool(subfolders)
         self.prefix = sanitize_affix(prefix)
@@ -161,6 +162,8 @@ class ExportOptions(object):
         # texte propre à chaque catégorie : { "part"/"assembly"/"drawing": txt }
         self.category_text = {k: sanitize_affix(v)
                               for k, v in (category_text or {}).items()}
+        # position du texte catégorie : "prefix" (début) ou "suffix" (fin)
+        self.category_position = "suffix" if category_position == "suffix" else "prefix"
         # rempli par build_export_names : { chemin_abs : nom_de_sortie }
         self.name_for = None
 
@@ -180,7 +183,14 @@ def build_output_stem(stem, kind, idx, opts):
         inner = "%s%s%s" % (num, opts.number_sep, inner)
     elif num:
         inner = "%s%s%s" % (inner, opts.number_sep, num)
-    full = "%s%s%s%s" % (opts.prefix, cat, inner, opts.suffix)
+    # texte de catégorie au début ou à la fin (à l'intérieur du préfixe/suffixe)
+    if cat and opts.category_position == "suffix":
+        core = "%s%s" % (inner, cat)
+    elif cat:
+        core = "%s%s" % (cat, inner)
+    else:
+        core = inner
+    full = "%s%s%s" % (opts.prefix, core, opts.suffix)
     return _BAD_NAME_CHARS.sub("", full)
 
 

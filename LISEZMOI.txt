@@ -52,7 +52,8 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
          position (début/fin). Un fichier et ses formats (STEP+STL…)
          partagent le même numéro.
        - Texte par catégorie : un texte propre ajouté aux Pièces, aux
-         Assemblages et aux Mises en plan (ex. PC, ENS, PL).
+         Assemblages et aux Mises en plan (ex. PC, ENS, PL), plaçable au
+         début ou à la fin du nom (Position).
        Un aperçu s'affiche en direct.
   5. Destination :
        - « À côté de chaque fichier » : un sous-dossier « Export » est

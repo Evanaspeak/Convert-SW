@@ -199,6 +199,13 @@ class App(ttk.Frame):
             ttk.Entry(self.cat_frame, textvariable=v, width=10).grid(
                 row=0, column=col + 1, sticky="w")
             col += 2
+        ttk.Label(self.cat_frame, text=" Position :").grid(
+            row=0, column=col, sticky="w")
+        self.cat_position_var = _t()
+        self.cat_position_var.set("début")
+        ttk.Combobox(self.cat_frame, textvariable=self.cat_position_var,
+                     state="readonly", width=7,
+                     values=["début", "fin"]).grid(row=0, column=col + 1, sticky="w")
 
         self.naming_preview = ttk.Label(naming, text="", foreground="#555")
         self.naming_preview.grid(row=4, column=0, columnspan=4, sticky="w",
@@ -357,6 +364,7 @@ class App(ttk.Frame):
 
     def _export_opts(self, dest_dir=None, subfolders=False):
         pos = "prefix" if self.number_position_var.get() == "début" else "suffix"
+        cat_pos = "prefix" if self.cat_position_var.get() == "début" else "suffix"
         cat = {k: v.get() for k, v in self.cat_vars.items()}
         return engine.ExportOptions(
             dest_dir=dest_dir, subfolders=subfolders,
@@ -364,7 +372,7 @@ class App(ttk.Frame):
             number_mode=self.number_mode_var.get(),
             number_start=self.number_start_var.get(),
             number_digits=self.number_digits_var.get(),
-            number_position=pos, category_text=cat)
+            number_position=pos, category_text=cat, category_position=cat_pos)
 
     def _update_naming_preview(self):
         opts = self._export_opts()
