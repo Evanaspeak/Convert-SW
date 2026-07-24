@@ -630,9 +630,13 @@ class RenameFrame(ttk.Frame):
         nb = ttk.LabelFrame(row2, text="Numérotation", padding=8)
         nb.grid(row=0, column=2, sticky="nsew", padx=(4, 0))
         nb.columnconfigure(1, weight=1)
-        self.number_enabled_var = self._var("bool", False)
-        ttk.Checkbutton(nb, text="Activer", variable=self.number_enabled_var).grid(
-            row=0, column=0, columnspan=2, sticky="w")
+        self.number_mode_var = self._var("str", "none")
+        modes = ttk.Frame(nb)
+        modes.grid(row=0, column=0, columnspan=2, sticky="w")
+        for val, label in (("none", "Aucune"), ("add", "Ajouter"),
+                           ("remove", "Supprimer")):
+            ttk.Radiobutton(modes, text=label, value=val,
+                            variable=self.number_mode_var).pack(side="left")
         ttk.Label(nb, text="Début :").grid(row=1, column=0, sticky="w")
         self.number_start_var = self._var("str", "1")
         ttk.Entry(nb, textvariable=self.number_start_var, width=6).grid(
@@ -642,10 +646,14 @@ class RenameFrame(ttk.Frame):
         ttk.Entry(nb, textvariable=self.number_digits_var, width=6).grid(
             row=2, column=1, sticky="w")
         ttk.Label(nb, text="Position :").grid(row=3, column=0, sticky="w")
-        self.number_position_var = self._var("str", "suffixe")
+        self.number_position_var = self._var("str", "fin")
         ttk.Combobox(nb, textvariable=self.number_position_var, state="readonly",
-                     width=8, values=["préfixe", "suffixe"]).grid(
+                     width=8, values=["début", "fin"]).grid(
             row=3, column=1, sticky="w")
+        ttk.Label(nb, text="Ajouter : n° au début/fin.\n"
+                          "Supprimer : retire la suite\nde chiffres au début/fin.",
+                  foreground="#777").grid(row=4, column=0, columnspan=2,
+                                          sticky="w", pady=(4, 0))
 
         # --- Aperçu (tableau) ----------------------------------------
         prev = ttk.Frame(self)
@@ -788,7 +796,7 @@ class RenameFrame(ttk.Frame):
             if lbl == self.case_mode_var.get():
                 case_mode = m
                 break
-        pos = "prefix" if self.number_position_var.get() == "préfixe" else "suffix"
+        pos = "prefix" if self.number_position_var.get() == "début" else "suffix"
         replacements = []
         for e in self.repl_rows:
             find = e["fv"].get()
@@ -801,7 +809,7 @@ class RenameFrame(ttk.Frame):
             case_mode=case_mode,
             spaces_to_underscore=self.spaces_var.get(),
             remove_accents=self.accents_var.get(),
-            number_enabled=self.number_enabled_var.get(),
+            number_mode=self.number_mode_var.get(),
             number_start=self.number_start_var.get(),
             number_digits=self.number_digits_var.get(),
             number_position=pos)

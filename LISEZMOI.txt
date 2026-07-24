@@ -76,9 +76,16 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
        - Casse (MAJUSCULES / minuscules / Première lettre), espaces -> _,
          retrait des accents. Le nettoyage s'applique à TOUT le nom,
          préfixe et suffixe compris.
-       - Numérotation auto (début, nombre de chiffres, préfixe/suffixe).
-         Le numéro se place À L'INTÉRIEUR : juste après le préfixe ou
-         juste avant le suffixe.
+       - Numérotation, 3 modes :
+           * Aucune ;
+           * Ajouter (début, nombre de chiffres, position début/fin) ;
+             le numéro se place À L'INTÉRIEUR (après le préfixe ou avant
+             le suffixe).
+           * Supprimer : détecte une suite de chiffres au début ou à la
+             fin du nom et retire UNIQUEMENT cette suite (et son
+             séparateur _ - . ou espace). S'il n'y a pas de suite, le nom
+             reste inchangé. Ex. « carter_007 » -> « carter »,
+             « v2_piece_012 » -> « v2_piece ».
   4. L'APERÇU (ancien nom -> nouveau nom) se met à jour en direct.
      Les conflits sont signalés en rouge : « doublon » (deux fichiers
      auraient le même nom), « existe déjà », « nom vide ». Tant qu'il

@@ -782,6 +782,27 @@ def strip_accents(text):
     return "".join(c for c in nf if not unicodedata.combining(c))
 
 
+# séparateurs pouvant entourer une numérotation
+_SEQ_SEP = " _-."
+
+
+def strip_sequence(name, position="suffix"):
+    """Retire UNIQUEMENT une suite de chiffres (et son séparateur adjacent).
+
+    position="suffix" -> suite en fin de nom ; "prefix" -> suite en début.
+    Si aucun chiffre n'est présent à cet endroit, le nom est renvoyé tel quel.
+    """
+    if position == "prefix":
+        m = re.match(r"^\d+", name)
+        if m:
+            name = name[m.end():].lstrip(_SEQ_SEP)
+    else:  # suffix / fin
+        m = re.search(r"\d+$", name)
+        if m:
+            name = name[:m.start()].rstrip(_SEQ_SEP)
+    return name
+
+
 class RenameRules(object):
     """Règles de renommage appliquées au NOM (sans l'extension).
 
@@ -792,7 +813,7 @@ class RenameRules(object):
     def __init__(self, replacements=None, case_sensitive=False,
                  prefix="", suffix="", case_mode="none",
                  spaces_to_underscore=False, remove_accents=False,
-                 number_enabled=False, number_start=1, number_digits=3,
+                 number_mode="none", number_start=1, number_digits=3,
                  number_position="suffix", number_sep="_"):
         self.replacements = list(replacements or [])
         self.case_sensitive = bool(case_sensitive)
@@ -801,7 +822,8 @@ class RenameRules(object):
         self.case_mode = case_mode if case_mode in CASE_MODES else "none"
         self.spaces_to_underscore = bool(spaces_to_underscore)
         self.remove_accents = bool(remove_accents)
-        self.number_enabled = bool(number_enabled)
+        # "none" | "add" (ajouter) | "remove" (supprimer la suite)
+        self.number_mode = number_mode if number_mode in ("none", "add", "remove") else "none"
         try:
             self.number_start = int(number_start)
         except (TypeError, ValueError):
@@ -828,7 +850,11 @@ def apply_rules(stem, index, rules):
             s = re.sub(re.escape(find), lambda _m, r=replace: r,
                        s, flags=re.IGNORECASE)
 
-    # 2) casse (sur le nom d'origine, pas sur le préfixe/suffixe)
+    # 2) suppression d'une numérotation existante (uniquement la suite)
+    if rules.number_mode == "remove":
+        s = strip_sequence(s, rules.number_position)
+
+    # 3) casse (sur le nom d'origine, pas sur le préfixe/suffixe)
     if rules.case_mode == "upper":
         s = s.upper()
     elif rules.case_mode == "lower":
@@ -836,10 +862,10 @@ def apply_rules(stem, index, rules):
     elif rules.case_mode == "capitalize":
         s = s.capitalize()
 
-    # 3) assemblage : la numérotation se place À L'INTÉRIEUR, juste après
-    #    le préfixe ou juste avant le suffixe (jamais au-delà).
+    # 4) assemblage : une numérotation AJOUTÉE se place À L'INTÉRIEUR, juste
+    #    après le préfixe ou juste avant le suffixe (jamais au-delà).
     num = ""
-    if rules.number_enabled:
+    if rules.number_mode == "add":
         num = str(rules.number_start + index).zfill(rules.number_digits)
     if num and rules.number_position == "prefix":
         core = "%s%s%s%s%s" % (rules.prefix, num, rules.number_sep, s, rules.suffix)
