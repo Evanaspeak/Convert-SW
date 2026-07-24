@@ -45,8 +45,15 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
      Les cadres sans fichier concerné sont grisés automatiquement. Les
      cases STEP/STL des « Pièces » et des « Assemblages » sont
      indépendantes.
-  4. Nommage (facultatif) : ajoutez un préfixe et/ou un suffixe aux noms
-     de sortie (un aperçu s'affiche).
+  4. Nommage (facultatif) : préfixe, suffixe, et numérotation.
+       - Numérotation : « Globale » (un seul compteur sur toute la
+         sélection) ou « Par type » (compteurs indépendants pour Pièces,
+         Assemblages, Mises en plan). Réglez début, nombre de chiffres,
+         position (début/fin). Un fichier et ses formats (STEP+STL…)
+         partagent le même numéro.
+       - Texte par catégorie : un texte propre ajouté aux Pièces, aux
+         Assemblages et aux Mises en plan (ex. PC, ENS, PL).
+       Un aperçu s'affiche en direct.
   5. Destination :
        - « À côté de chaque fichier » : un sous-dossier « Export » est
          créé à côté de chaque source (par défaut) ;

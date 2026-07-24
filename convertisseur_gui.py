@@ -136,24 +136,73 @@ class App(ttk.Frame):
                                 variable=var).pack(anchor="w")
         r += 1
 
-        # --- Nommage (préfixe / suffixe) -----------------------------
+        # --- Nommage (préfixe / suffixe / numérotation) --------------
         naming = ttk.LabelFrame(self, text="Nommage des fichiers", padding=8)
         naming.grid(row=r, column=0, sticky="ew", pady=(0, 6))
         naming.columnconfigure(1, weight=1)
         naming.columnconfigure(3, weight=1)
+
+        def _t():  # petit raccourci : StringVar tracée sur l'aperçu
+            v = tk.StringVar()
+            v.trace_add("write", lambda *_: self._update_naming_preview())
+            return v
+
         ttk.Label(naming, text="Préfixe :").grid(row=0, column=0, sticky="w")
-        self.prefix_var = tk.StringVar()
-        self.prefix_var.trace_add("write", lambda *_: self._update_naming_preview())
+        self.prefix_var = _t()
         ttk.Entry(naming, textvariable=self.prefix_var, width=16).grid(
             row=0, column=1, sticky="ew", padx=(4, 10))
         ttk.Label(naming, text="Suffixe :").grid(row=0, column=2, sticky="w")
-        self.suffix_var = tk.StringVar()
-        self.suffix_var.trace_add("write", lambda *_: self._update_naming_preview())
+        self.suffix_var = _t()
         ttk.Entry(naming, textvariable=self.suffix_var, width=16).grid(
             row=0, column=3, sticky="ew", padx=(4, 0))
+
+        # numérotation
+        ttk.Separator(naming, orient="horizontal").grid(
+            row=1, column=0, columnspan=4, sticky="ew", pady=6)
+        numrow = ttk.Frame(naming)
+        numrow.grid(row=2, column=0, columnspan=4, sticky="ew")
+        ttk.Label(numrow, text="Numérotation :").pack(side="left")
+        self.number_mode_var = tk.StringVar(value="none")
+        self.number_mode_var.trace_add(
+            "write", lambda *_: self._update_naming_preview())
+        for val, label in (("none", "Aucune"), ("global", "Globale"),
+                           ("per_type", "Par type")):
+            ttk.Radiobutton(numrow, text=label, value=val,
+                            variable=self.number_mode_var).pack(side="left",
+                                                                padx=(6, 0))
+        ttk.Label(numrow, text="   Début :").pack(side="left")
+        self.number_start_var = _t()
+        self.number_start_var.set("1")
+        ttk.Entry(numrow, textvariable=self.number_start_var, width=5).pack(side="left")
+        ttk.Label(numrow, text=" Chiffres :").pack(side="left")
+        self.number_digits_var = _t()
+        self.number_digits_var.set("3")
+        ttk.Entry(numrow, textvariable=self.number_digits_var, width=4).pack(side="left")
+        ttk.Label(numrow, text=" Position :").pack(side="left")
+        self.number_position_var = _t()
+        self.number_position_var.set("fin")
+        ttk.Combobox(numrow, textvariable=self.number_position_var, state="readonly",
+                     width=7, values=["début", "fin"]).pack(side="left")
+
+        # texte propre à chaque catégorie
+        self.cat_frame = ttk.Frame(naming)
+        self.cat_frame.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(6, 0))
+        ttk.Label(self.cat_frame, text="Texte par catégorie :").grid(
+            row=0, column=0, sticky="w")
+        self.cat_vars = {}
+        col = 1
+        for kind in engine.KIND_ORDER:
+            ttk.Label(self.cat_frame, text=" %s :" % engine.KIND_LABELS[kind]).grid(
+                row=0, column=col, sticky="w")
+            v = _t()
+            self.cat_vars[kind] = v
+            ttk.Entry(self.cat_frame, textvariable=v, width=10).grid(
+                row=0, column=col + 1, sticky="w")
+            col += 2
+
         self.naming_preview = ttk.Label(naming, text="", foreground="#555")
-        self.naming_preview.grid(row=1, column=0, columnspan=4, sticky="w",
-                                 pady=(4, 0))
+        self.naming_preview.grid(row=4, column=0, columnspan=4, sticky="w",
+                                 pady=(6, 0))
         r += 1
 
         # --- Destination ---------------------------------------------
@@ -306,11 +355,28 @@ class App(ttk.Frame):
             distinct.update(sel.get(kind, []))
         return distinct
 
+    def _export_opts(self, dest_dir=None, subfolders=False):
+        pos = "prefix" if self.number_position_var.get() == "début" else "suffix"
+        cat = {k: v.get() for k, v in self.cat_vars.items()}
+        return engine.ExportOptions(
+            dest_dir=dest_dir, subfolders=subfolders,
+            prefix=self.prefix_var.get(), suffix=self.suffix_var.get(),
+            number_mode=self.number_mode_var.get(),
+            number_start=self.number_start_var.get(),
+            number_digits=self.number_digits_var.get(),
+            number_position=pos, category_text=cat)
+
     def _update_naming_preview(self):
-        pre = engine.sanitize_affix(self.prefix_var.get())
-        suf = engine.sanitize_affix(self.suffix_var.get())
-        self.naming_preview.configure(
-            text="Exemple : %sma_piece%s.step" % (pre, suf))
+        opts = self._export_opts()
+        mode = opts.number_mode
+        idx = 0 if mode in ("global", "per_type") else None
+        ex_part = engine.build_output_stem("ma_piece", "part", idx, opts)
+        if mode == "per_type":
+            ex_asm = engine.build_output_stem("mon_ensemble", "assembly", 0, opts)
+            txt = "Exemples : %s.step   ·   %s.step" % (ex_part, ex_asm)
+        else:
+            txt = "Exemple : %s.step" % ex_part
+        self.naming_preview.configure(text=txt)
 
     def _refresh_state(self):
         present = self._kinds_present()
@@ -365,9 +431,15 @@ class App(ttk.Frame):
                 return
 
         subfolders = len(self._distinct_selected_formats()) > 1
-        opts = engine.ExportOptions(
-            dest_dir=dest_dir, subfolders=subfolders,
-            prefix=self.prefix_var.get(), suffix=self.suffix_var.get())
+        opts = self._export_opts(dest_dir=dest_dir, subfolders=subfolders)
+
+        # numérotation : pré-calcul des noms dans l'ordre de la liste
+        items = []
+        for p in self.files:
+            route = engine.route_for(p)
+            if route:
+                items.append((p, route[1]))
+        engine.build_export_names(items, opts)
 
         groups, skipped = engine.group_by_software(self.files)
         for f in skipped:

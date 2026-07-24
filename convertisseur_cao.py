@@ -139,11 +139,73 @@ class ExportOptions(object):
     prefix     : texte ajouté DEVANT le nom de fichier.
     suffix     : texte ajouté DERRIÈRE le nom (avant l'extension).
     """
-    def __init__(self, dest_dir=None, subfolders=False, prefix="", suffix=""):
+    def __init__(self, dest_dir=None, subfolders=False, prefix="", suffix="",
+                 number_mode="none", number_start=1, number_digits=3,
+                 number_position="suffix", number_sep="_", category_text=None):
         self.dest_dir = dest_dir or None
         self.subfolders = bool(subfolders)
         self.prefix = sanitize_affix(prefix)
         self.suffix = sanitize_affix(suffix)
+        # numérotation : "none" | "global" | "per_type"
+        self.number_mode = number_mode if number_mode in ("none", "global", "per_type") else "none"
+        try:
+            self.number_start = int(number_start)
+        except (TypeError, ValueError):
+            self.number_start = 1
+        try:
+            self.number_digits = max(1, int(number_digits))
+        except (TypeError, ValueError):
+            self.number_digits = 3
+        self.number_position = "prefix" if number_position == "prefix" else "suffix"
+        self.number_sep = number_sep if number_sep is not None else "_"
+        # texte propre à chaque catégorie : { "part"/"assembly"/"drawing": txt }
+        self.category_text = {k: sanitize_affix(v)
+                              for k, v in (category_text or {}).items()}
+        # rempli par build_export_names : { chemin_abs : nom_de_sortie }
+        self.name_for = None
+
+
+def build_output_stem(stem, kind, idx, opts):
+    """Construit le nom de sortie (sans extension) d'un fichier.
+
+    idx : rang pour la numérotation (0,1,2…) ou None si pas de numéro.
+    Assemblage : préfixe + texte_catégorie + [num] + nom + [num] + suffixe.
+    """
+    num = ""
+    if idx is not None and opts.number_mode in ("global", "per_type"):
+        num = str(opts.number_start + idx).zfill(opts.number_digits)
+    cat = (opts.category_text or {}).get(kind, "")
+    inner = stem
+    if num and opts.number_position == "prefix":
+        inner = "%s%s%s" % (num, opts.number_sep, inner)
+    elif num:
+        inner = "%s%s%s" % (inner, opts.number_sep, num)
+    full = "%s%s%s%s" % (opts.prefix, cat, inner, opts.suffix)
+    return _BAD_NAME_CHARS.sub("", full)
+
+
+def build_export_names(items, opts):
+    """Pré-calcule le nom de sortie de chaque fichier (numérotation comprise).
+
+    items : liste de (chemin, nature) dans l'ordre de numérotation voulu.
+    Remplit et renvoie opts.name_for = { chemin_abs : nom_sans_extension }.
+    """
+    counters = {}
+    global_ctr = 0
+    name_for = {}
+    for src, kind in items:
+        if opts.number_mode == "global":
+            idx = global_ctr
+            global_ctr += 1
+        elif opts.number_mode == "per_type":
+            idx = counters.get(kind, 0)
+            counters[kind] = idx + 1
+        else:
+            idx = None
+        name_for[os.path.abspath(src)] = build_output_stem(
+            clean_stem(src), kind, idx, opts)
+    opts.name_for = name_for
+    return name_for
 
 
 def output_path(src, target, opts=None, ext=None):
@@ -159,8 +221,12 @@ def output_path(src, target, opts=None, ext=None):
     folder = os.path.join(base, target.upper()) if opts.subfolders else base
     os.makedirs(folder, exist_ok=True)
     real_ext = ext if ext else target
-    name = "%s%s%s.%s" % (opts.prefix, clean_stem(src), opts.suffix, real_ext)
-    return os.path.join(folder, name)
+    key = os.path.abspath(src)
+    if opts.name_for and key in opts.name_for:
+        stem = opts.name_for[key]
+    else:
+        stem = "%s%s%s" % (opts.prefix, clean_stem(src), opts.suffix)
+    return os.path.join(folder, "%s.%s" % (stem, real_ext))
 
 
 # ---------------------------------------------------------------------------
