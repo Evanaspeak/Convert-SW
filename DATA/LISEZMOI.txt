@@ -18,10 +18,12 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
   DATA\  (fichiers internes, pas besoin d'y toucher) :
     convertisseur_gui.py    Interface graphique (fenêtre).
     convertisseur_cao.py    Moteur (routage + pilotage des logiciels).
-    Convertisseur_CAO.bat   Lancement avec console (voir une erreur).
-    Convertir_ici.bat       Lanceur glisser-déposer (optionnel).
-    menu_contextuel.reg     Entrées de menu clic droit (optionnel).
-    LISEZMOI.txt            Ce fichier.
+    Convertisseur_CAO.bat        Lancement avec console (voir une erreur).
+    Convertir_ici.bat            Lanceur glisser-déposer (optionnel).
+    Installer_clic_droit.bat     Ajoute le menu clic droit (optionnel).
+    Desinstaller_clic_droit.bat  Retire le menu clic droit.
+    icone.ico                    Icône du raccourci bureau.
+    LISEZMOI.txt                 Ce fichier.
 
   Astuce : depuis l'écran d'accueil de l'appli, le bouton « Créer un
   raccourci sur le bureau » ajoute une icône de lancement sur le bureau.
@@ -137,8 +139,10 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
       py -3 convertisseur_cao.py            (sans argument = ouvre la fenêtre)
 
   Clic droit (un fichier à la fois) :
-      Éditez menu_contextuel.reg (remplacez le chemin par votre dossier),
-      double-cliquez pour l'importer.
+      Double-cliquez « DATA\Installer_clic_droit.bat » (aucun chemin à
+      modifier, aucun droit administrateur requis). Ensuite, un clic droit
+      sur un fichier CAO propose « Convertir... ». Pour retirer l'entrée :
+      « Desinstaller_clic_droit.bat ».
 
 ----------------------------------------------------------------------
  CORRESPONDANCES FICHIERS -> LOGICIELS
