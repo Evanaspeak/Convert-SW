@@ -60,6 +60,30 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
      en cas d'échec). Chaque logiciel n'est lancé qu'une seule fois.
 
 ----------------------------------------------------------------------
+ OUTIL RENOMMAGE (depuis l'écran d'accueil)
+----------------------------------------------------------------------
+  Renommage par lot, SUR PLACE (le nom d'origine est remplacé),
+  applicable à tout type de fichier. L'extension est conservée.
+
+  1. Accueil > « Renommage ».
+  2. Ajoutez des fichiers ou un dossier.
+  3. Réglez les règles (combinables) :
+       - Rechercher / remplacer (avec option « respecter la casse ») ;
+       - Préfixe / suffixe ;
+       - Casse (MAJUSCULES / minuscules / Première lettre), espaces -> _,
+         retrait des accents ;
+       - Numérotation auto (début, nombre de chiffres, préfixe/suffixe).
+  4. L'APERÇU (ancien nom -> nouveau nom) se met à jour en direct.
+     Les conflits sont signalés en rouge : « doublon » (deux fichiers
+     auraient le même nom), « existe déjà », « nom vide ». Tant qu'il
+     reste un conflit, le bouton « Appliquer » est désactivé.
+  5. « Appliquer le renommage » : confirmation, puis renommage en deux
+     passes (gère les échanges de noms). Un bilan s'affiche.
+
+  Ordre d'application des règles : rechercher/remplacer -> casse ->
+  nettoyage -> préfixe/suffixe -> numérotation.
+
+----------------------------------------------------------------------
  UTILISATION — SANS FENÊTRE (optionnel)
 ----------------------------------------------------------------------
   Glisser-déposer :

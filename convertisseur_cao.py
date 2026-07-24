@@ -26,9 +26,11 @@ concernés. Le mode --dry-run tourne partout (sert à vérifier le routage).
 
 import os
 import re
+import shutil
 import sys
 import time
 import traceback
+import unicodedata
 
 # ---------------------------------------------------------------------------
 # Configuration / routage
@@ -759,6 +761,204 @@ def convert_groups(groups, selection, opts=None, log=default_log,
     log("=" * 56)
     log("Terminé : %d/%d export(s) réussi(s)." % (total_ok, total))
     return total_ok, total, failures
+
+
+# ---------------------------------------------------------------------------
+# Renommage par lot (indépendant de la conversion)
+# ---------------------------------------------------------------------------
+
+CASE_MODES = ["none", "upper", "lower", "capitalize"]
+CASE_LABELS = {
+    "none": "(inchangée)",
+    "upper": "MAJUSCULES",
+    "lower": "minuscules",
+    "capitalize": "Première lettre en majuscule",
+}
+
+
+def strip_accents(text):
+    """Retire les accents/diacritiques (é -> e, ç -> c)."""
+    nf = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in nf if not unicodedata.combining(c))
+
+
+class RenameRules(object):
+    """Règles de renommage appliquées au NOM (sans l'extension)."""
+    def __init__(self, find="", replace="", case_sensitive=False,
+                 prefix="", suffix="", case_mode="none",
+                 spaces_to_underscore=False, remove_accents=False,
+                 number_enabled=False, number_start=1, number_digits=3,
+                 number_position="suffix", number_sep="_"):
+        self.find = find or ""
+        self.replace = replace or ""
+        self.case_sensitive = bool(case_sensitive)
+        self.prefix = prefix or ""
+        self.suffix = suffix or ""
+        self.case_mode = case_mode if case_mode in CASE_MODES else "none"
+        self.spaces_to_underscore = bool(spaces_to_underscore)
+        self.remove_accents = bool(remove_accents)
+        self.number_enabled = bool(number_enabled)
+        try:
+            self.number_start = int(number_start)
+        except (TypeError, ValueError):
+            self.number_start = 1
+        try:
+            self.number_digits = max(1, int(number_digits))
+        except (TypeError, ValueError):
+            self.number_digits = 3
+        self.number_position = "prefix" if number_position == "prefix" else "suffix"
+        self.number_sep = number_sep if number_sep is not None else "_"
+
+
+def apply_rules(stem, index, rules):
+    """Transforme un nom (sans extension) selon les règles. index = 0,1,2…"""
+    s = stem
+
+    # 1) rechercher / remplacer
+    if rules.find:
+        if rules.case_sensitive:
+            s = s.replace(rules.find, rules.replace)
+        else:
+            s = re.sub(re.escape(rules.find), lambda _m: rules.replace,
+                       s, flags=re.IGNORECASE)
+
+    # 2) casse
+    if rules.case_mode == "upper":
+        s = s.upper()
+    elif rules.case_mode == "lower":
+        s = s.lower()
+    elif rules.case_mode == "capitalize":
+        s = s.capitalize()
+
+    # 3) nettoyage
+    if rules.spaces_to_underscore:
+        s = s.replace(" ", "_")
+    if rules.remove_accents:
+        s = strip_accents(s)
+
+    # 4) préfixe / suffixe (texte littéral, non affecté par la casse)
+    s = "%s%s%s" % (rules.prefix, s, rules.suffix)
+
+    # 5) numérotation
+    if rules.number_enabled:
+        num = str(rules.number_start + index).zfill(rules.number_digits)
+        if rules.number_position == "prefix":
+            s = "%s%s%s" % (num, rules.number_sep, s)
+        else:
+            s = "%s%s%s" % (s, rules.number_sep, num)
+
+    # sécurité : retirer les caractères interdits dans un nom de fichier
+    s = _BAD_NAME_CHARS.sub("", s)
+    return s
+
+
+def build_rename_plan(paths, rules):
+    """Construit le plan de renommage.
+
+    Renvoie une liste de dicts :
+      { path, folder, old, new, status }
+    status : "ok" | "unchanged" | "empty" | "duplicate" | "exists"
+    """
+    plan = []
+    for i, p in enumerate(paths):
+        p = os.path.abspath(p)
+        folder = os.path.dirname(p)
+        base = os.path.basename(p)
+        stem, ext = os.path.splitext(base)
+        new_stem = apply_rules(stem, i, rules)
+        new_base = (new_stem + ext) if new_stem else ""
+        plan.append({"path": p, "folder": folder, "old": base,
+                     "new": new_base, "status": "ok"})
+
+    # cibles (Windows : comparaison insensible à la casse)
+    targets = {}
+    sources = set()
+    for it in plan:
+        sources.add((it["folder"].lower(), it["old"].lower()))
+    for it in plan:
+        key = (it["folder"].lower(), it["new"].lower())
+        targets.setdefault(key, []).append(it)
+
+    for it in plan:
+        if not it["new"]:
+            it["status"] = "empty"
+            continue
+        if it["new"] == it["old"]:
+            it["status"] = "unchanged"
+            continue
+        key = (it["folder"].lower(), it["new"].lower())
+        if len(targets[key]) > 1:
+            it["status"] = "duplicate"
+            continue
+        target_path = os.path.join(it["folder"], it["new"])
+        # conflit seulement si la cible existe ET n'est pas un fichier de
+        # notre lot (qui sera renommé ailleurs, géré par les deux passes) ;
+        # un simple changement de casse du même fichier est autorisé.
+        if os.path.exists(target_path) and key not in sources:
+            it["status"] = "exists"
+            continue
+        it["status"] = "ok"
+    return plan
+
+
+def rename_stats(plan):
+    """Compte par statut."""
+    stats = {}
+    for it in plan:
+        stats[it["status"]] = stats.get(it["status"], 0) + 1
+    return stats
+
+
+def execute_rename(plan, log=default_log, progress=None):
+    """Applique le renommage SUR PLACE, en deux passes (évite les collisions).
+
+    Ne traite que les entrées « ok ». Renvoie (nb_ok, nb_total, failures)
+    où failures est une liste de (old, new, message).
+    """
+    todo = [it for it in plan if it["status"] == "ok"]
+    total = len(todo)
+    done = ok = 0
+    failures = []
+    temps = []
+
+    # Passe 1 : vers des noms temporaires uniques
+    for it in todo:
+        src = os.path.join(it["folder"], it["old"])
+        tmp = os.path.join(it["folder"], it["old"] + ".rntmp_%d" % done)
+        n = 0
+        while os.path.exists(tmp):
+            n += 1
+            tmp = os.path.join(it["folder"], it["old"] + ".rntmp_%d_%d" % (done, n))
+        try:
+            os.rename(src, tmp)
+            temps.append((it, tmp))
+        except Exception as e:
+            failures.append((it["old"], it["new"], "passe 1: %s" % e))
+        done += 1
+        if progress:
+            progress(done, total * 2)
+
+    # Passe 2 : du temporaire vers le nom final
+    for it, tmp in temps:
+        dst = os.path.join(it["folder"], it["new"])
+        try:
+            os.rename(tmp, dst)
+            ok += 1
+            log("  OK  %s -> %s" % (it["old"], it["new"]))
+        except Exception as e:
+            failures.append((it["old"], it["new"], "passe 2: %s" % e))
+            log("  KO  %s -> %s : %s" % (it["old"], it["new"], e))
+            # tentative de restauration du nom d'origine
+            try:
+                os.rename(tmp, os.path.join(it["folder"], it["old"]))
+            except Exception:
+                pass
+        done += 1
+        if progress:
+            progress(done, total * 2)
+
+    log("Renommage terminé : %d/%d fichier(s)." % (ok, total))
+    return ok, total, failures
 
 
 # ---------------------------------------------------------------------------

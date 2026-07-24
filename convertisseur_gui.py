@@ -518,33 +518,302 @@ class HomeFrame(ttk.Frame):
                    command=controller.show_rename).pack()
 
 
+_STATUS_TEXT = {
+    "ok": "à renommer",
+    "unchanged": "inchangé",
+    "empty": "nom vide !",
+    "duplicate": "doublon !",
+    "exists": "existe déjà !",
+}
+_CONFLICT = {"empty", "duplicate", "exists"}
+
+
 class RenameFrame(ttk.Frame):
-    """Écran de renommage — réservé pour plus tard."""
+    """Renommage par lot, sur place, avec aperçu et détection de conflits."""
+
     def __init__(self, master, controller):
-        super().__init__(master, padding=30)
+        super().__init__(master, padding=10)
         self.controller = controller
         self.grid(sticky="nsew")
         master.columnconfigure(0, weight=1)
         master.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
+        self.rowconfigure(3, weight=1)
 
+        self.files = []
+        self._vars = []
+        self._build()
+        self._refresh_preview()
+
+    # ------------------------------------------------------------------ UI
+    def _var(self, kind, value):
+        v = {"str": tk.StringVar, "bool": tk.BooleanVar}[kind](value=value)
+        v.trace_add("write", lambda *_: self._refresh_preview())
+        self._vars.append(v)
+        return v
+
+    def _build(self):
         header = ttk.Frame(self)
-        header.grid(row=0, column=0, sticky="ew")
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         ttk.Button(header, text="‹ Accueil",
-                   command=controller.show_home).pack(side="left")
-        ttk.Label(header, text="   Renommage",
+                   command=self.controller.show_home).pack(side="left")
+        ttk.Label(header, text="   Renommage par lot",
                   font=("", 11, "bold")).pack(side="left")
 
-        ttk.Label(self, text="Fonction de renommage à venir.",
-                  font=("", 13)).grid(row=1, column=0, pady=40)
-        ttk.Label(self, text="On en reparle : dis-moi les règles de "
-                             "renommage souhaitées.",
-                  foreground="#555").grid(row=2, column=0)
+        bar = ttk.Frame(self)
+        bar.grid(row=1, column=0, sticky="ew")
+        ttk.Button(bar, text="Ajouter des fichiers…",
+                   command=self.add_files).pack(side="left")
+        ttk.Button(bar, text="Ajouter un dossier…",
+                   command=self.add_folder).pack(side="left", padx=(6, 0))
+        ttk.Button(bar, text="Retirer la sélection",
+                   command=self.remove_selected).pack(side="left", padx=(6, 0))
+        ttk.Button(bar, text="Vider la liste",
+                   command=self.clear_files).pack(side="left", padx=(6, 0))
+        ttk.Button(bar, text="↑", width=3,
+                   command=lambda: self._move(-1)).pack(side="left", padx=(12, 0))
+        ttk.Button(bar, text="↓", width=3,
+                   command=lambda: self._move(1)).pack(side="left", padx=(2, 0))
+
+        # --- Règles ---------------------------------------------------
+        rules = ttk.Frame(self)
+        rules.grid(row=2, column=0, sticky="ew", pady=(8, 6))
+        for c in range(4):
+            rules.columnconfigure(c, weight=1)
+
+        # rechercher / remplacer
+        fr = ttk.LabelFrame(rules, text="Rechercher / remplacer", padding=8)
+        fr.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+        fr.columnconfigure(1, weight=1)
+        ttk.Label(fr, text="Rechercher :").grid(row=0, column=0, sticky="w")
+        self.find_var = self._var("str", "")
+        ttk.Entry(fr, textvariable=self.find_var).grid(row=0, column=1, sticky="ew")
+        ttk.Label(fr, text="Remplacer :").grid(row=1, column=0, sticky="w")
+        self.replace_var = self._var("str", "")
+        ttk.Entry(fr, textvariable=self.replace_var).grid(row=1, column=1, sticky="ew")
+        self.case_sensitive_var = self._var("bool", False)
+        ttk.Checkbutton(fr, text="Respecter la casse",
+                        variable=self.case_sensitive_var).grid(
+            row=2, column=0, columnspan=2, sticky="w")
+
+        # préfixe / suffixe
+        ps = ttk.LabelFrame(rules, text="Préfixe / suffixe", padding=8)
+        ps.grid(row=0, column=1, sticky="nsew", padx=4)
+        ps.columnconfigure(1, weight=1)
+        ttk.Label(ps, text="Préfixe :").grid(row=0, column=0, sticky="w")
+        self.prefix_var = self._var("str", "")
+        ttk.Entry(ps, textvariable=self.prefix_var).grid(row=0, column=1, sticky="ew")
+        ttk.Label(ps, text="Suffixe :").grid(row=1, column=0, sticky="w")
+        self.suffix_var = self._var("str", "")
+        ttk.Entry(ps, textvariable=self.suffix_var).grid(row=1, column=1, sticky="ew")
+
+        # casse / nettoyage
+        cc = ttk.LabelFrame(rules, text="Casse / nettoyage", padding=8)
+        cc.grid(row=0, column=2, sticky="nsew", padx=4)
+        cc.columnconfigure(0, weight=1)
+        self.case_mode_var = self._var("str", engine.CASE_LABELS["none"])
+        ttk.Combobox(cc, textvariable=self.case_mode_var, state="readonly",
+                     values=[engine.CASE_LABELS[m] for m in engine.CASE_MODES]).grid(
+            row=0, column=0, sticky="ew")
+        self.spaces_var = self._var("bool", False)
+        ttk.Checkbutton(cc, text="Espaces -> _",
+                        variable=self.spaces_var).grid(row=1, column=0, sticky="w")
+        self.accents_var = self._var("bool", False)
+        ttk.Checkbutton(cc, text="Retirer les accents",
+                        variable=self.accents_var).grid(row=2, column=0, sticky="w")
+
+        # numérotation
+        nb = ttk.LabelFrame(rules, text="Numérotation", padding=8)
+        nb.grid(row=0, column=3, sticky="nsew", padx=(4, 0))
+        nb.columnconfigure(1, weight=1)
+        self.number_enabled_var = self._var("bool", False)
+        ttk.Checkbutton(nb, text="Activer", variable=self.number_enabled_var).grid(
+            row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(nb, text="Début :").grid(row=1, column=0, sticky="w")
+        self.number_start_var = self._var("str", "1")
+        ttk.Entry(nb, textvariable=self.number_start_var, width=6).grid(
+            row=1, column=1, sticky="w")
+        ttk.Label(nb, text="Chiffres :").grid(row=2, column=0, sticky="w")
+        self.number_digits_var = self._var("str", "3")
+        ttk.Entry(nb, textvariable=self.number_digits_var, width=6).grid(
+            row=2, column=1, sticky="w")
+        ttk.Label(nb, text="Position :").grid(row=3, column=0, sticky="w")
+        self.number_position_var = self._var("str", "suffixe")
+        ttk.Combobox(nb, textvariable=self.number_position_var, state="readonly",
+                     width=8, values=["préfixe", "suffixe"]).grid(
+            row=3, column=1, sticky="w")
+
+        # --- Aperçu (tableau) ----------------------------------------
+        prev = ttk.Frame(self)
+        prev.grid(row=3, column=0, sticky="nsew")
+        prev.columnconfigure(0, weight=1)
+        prev.rowconfigure(1, weight=1)
+        ttk.Label(prev, text="Aperçu (ancien nom -> nouveau nom) :").grid(
+            row=0, column=0, sticky="w", pady=(4, 2))
+        cols = ("old", "new", "status")
+        self.tree = ttk.Treeview(prev, columns=cols, show="headings", height=9)
+        self.tree.heading("old", text="Ancien nom")
+        self.tree.heading("new", text="Nouveau nom")
+        self.tree.heading("status", text="État")
+        self.tree.column("old", width=300)
+        self.tree.column("new", width=300)
+        self.tree.column("status", width=110, anchor="center")
+        self.tree.tag_configure("conflict", foreground="#b00020")
+        self.tree.tag_configure("unchanged", foreground="#888")
+        self.tree.grid(row=1, column=0, sticky="nsew")
+        tsb = ttk.Scrollbar(prev, orient="vertical", command=self.tree.yview)
+        tsb.grid(row=1, column=1, sticky="ns")
+        self.tree.configure(yscrollcommand=tsb.set)
+
+        # --- Bas : stats + action ------------------------------------
+        bottom = ttk.Frame(self)
+        bottom.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        bottom.columnconfigure(0, weight=1)
+        self.stats_label = ttk.Label(bottom, text="")
+        self.stats_label.grid(row=0, column=0, sticky="w")
+        self.apply_btn = ttk.Button(bottom, text="Appliquer le renommage",
+                                    command=self.apply_rename)
+        self.apply_btn.grid(row=0, column=1, sticky="e")
+
+    # ------------------------------------------------------------- fichiers
+    def add_files(self):
+        paths = filedialog.askopenfilenames(title="Choisir des fichiers")
+        self._add(paths)
+
+    def add_folder(self):
+        folder = filedialog.askdirectory(title="Choisir un dossier")
+        if not folder:
+            return
+        names = []
+        for n in sorted(os.listdir(folder)):
+            full = os.path.join(folder, n)
+            if os.path.isfile(full):
+                names.append(full)
+        self._add(names)
+
+    def _add(self, paths):
+        existing = set(self.files)
+        for p in paths:
+            p = os.path.abspath(p)
+            if p not in existing:
+                self.files.append(p)
+                existing.add(p)
+        self._refresh_preview()
+
+    def remove_selected(self):
+        sel = set(self.tree.selection())
+        keep = []
+        for iid, p in zip(self._iids, self.files):
+            if iid not in sel:
+                keep.append(p)
+        self.files = keep
+        self._refresh_preview()
+
+    def clear_files(self):
+        self.files = []
+        self._refresh_preview()
+
+    def _move(self, delta):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        idx = self._iids.index(sel[0])
+        j = idx + delta
+        if 0 <= j < len(self.files):
+            self.files[idx], self.files[j] = self.files[j], self.files[idx]
+            self._refresh_preview()
+            if j < len(self._iids):
+                self.tree.selection_set(self._iids[j])
+
+    # -------------------------------------------------------------- règles
+    def _rules(self):
+        case_mode = "none"
+        for m, lbl in engine.CASE_LABELS.items():
+            if lbl == self.case_mode_var.get():
+                case_mode = m
+                break
+        pos = "prefix" if self.number_position_var.get() == "préfixe" else "suffix"
+        return engine.RenameRules(
+            find=self.find_var.get(), replace=self.replace_var.get(),
+            case_sensitive=self.case_sensitive_var.get(),
+            prefix=self.prefix_var.get(), suffix=self.suffix_var.get(),
+            case_mode=case_mode,
+            spaces_to_underscore=self.spaces_var.get(),
+            remove_accents=self.accents_var.get(),
+            number_enabled=self.number_enabled_var.get(),
+            number_start=self.number_start_var.get(),
+            number_digits=self.number_digits_var.get(),
+            number_position=pos)
+
+    def _refresh_preview(self):
+        self.plan = engine.build_rename_plan(self.files, self._rules())
+        self.tree.delete(*self.tree.get_children())
+        self._iids = []
+        for it in self.plan:
+            tags = ()
+            if it["status"] in _CONFLICT:
+                tags = ("conflict",)
+            elif it["status"] == "unchanged":
+                tags = ("unchanged",)
+            iid = self.tree.insert(
+                "", "end",
+                values=(it["old"], it["new"] or "—",
+                        _STATUS_TEXT.get(it["status"], it["status"])),
+                tags=tags)
+            self._iids.append(iid)
+
+        stats = engine.rename_stats(self.plan)
+        conflicts = sum(stats.get(s, 0) for s in _CONFLICT)
+        parts = ["%d fichier(s)" % len(self.files),
+                 "%d à renommer" % stats.get("ok", 0)]
+        if stats.get("unchanged"):
+            parts.append("%d inchangé(s)" % stats["unchanged"])
+        if conflicts:
+            parts.append("%d conflit(s)" % conflicts)
+        self.stats_label.configure(text="  ·  ".join(parts))
+        can = stats.get("ok", 0) > 0 and conflicts == 0
+        self.apply_btn.configure(state="normal" if can else "disabled")
+
+    def apply_rename(self):
+        stats = engine.rename_stats(self.plan)
+        conflicts = sum(stats.get(s, 0) for s in _CONFLICT)
+        n = stats.get("ok", 0)
+        if conflicts or n == 0:
+            return
+        if not messagebox.askyesno(
+                "Confirmer le renommage",
+                "%d fichier(s) vont être renommés SUR PLACE.\n"
+                "Cette action est irréversible. Continuer ?" % n):
+            return
+
+        ok, total, failures = engine.execute_rename(self.plan, log=lambda m: None)
+
+        # mettre à jour la liste avec les nouveaux chemins existants
+        new_files = []
+        for it in self.plan:
+            cand_new = os.path.join(it["folder"], it["new"]) if it["new"] else ""
+            if cand_new and os.path.exists(cand_new):
+                new_files.append(cand_new)
+            elif os.path.exists(it["path"]):
+                new_files.append(it["path"])
+        self.files = new_files
+        self._refresh_preview()
+
+        if not failures:
+            messagebox.showinfo("Renommage terminé",
+                                "%d/%d fichier(s) renommé(s)." % (ok, total))
+        else:
+            lines = ["• %s -> %s : %s" % (o, nw, m) for o, nw, m in failures[:25]]
+            if len(failures) > 25:
+                lines.append("… et %d autre(s)." % (len(failures) - 25))
+            messagebox.showwarning(
+                "Renommage terminé avec des échecs",
+                "%d/%d réussi(s).\n\nÉchecs :\n%s" % (ok, total, "\n".join(lines)))
 
 
 class Controller(object):
     """Aiguille entre l'accueil, la conversion et le renommage."""
-    GEOMETRY = {"home": "560x360", "conversion": "820x820", "rename": "560x360"}
+    GEOMETRY = {"home": "560x360", "conversion": "820x820", "rename": "900x680"}
 
     def __init__(self, root):
         self.root = root
