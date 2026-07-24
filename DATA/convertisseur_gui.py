@@ -38,7 +38,7 @@ _FILE_TYPES = [
 
 
 def _app_root():
-    """Dossier racine (parent du dossier « Application »)."""
+    """Dossier racine (parent du dossier « DATA »)."""
     here = os.path.dirname(os.path.abspath(__file__))
     return os.path.dirname(here)
 
@@ -63,7 +63,7 @@ def create_desktop_shortcut():
         sc.TargetPath = os.path.join(windir, "System32", "wscript.exe")
         sc.Arguments = '"%s"' % vbs
     else:
-        # repli : lanceur .bat dans le dossier Application
+        # repli : lanceur .bat dans le dossier DATA
         sc.TargetPath = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                      "Convertisseur_CAO.bat")
     sc.WorkingDirectory = root

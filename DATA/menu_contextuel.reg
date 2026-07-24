@@ -7,7 +7,7 @@ Windows Registry Editor Version 5.00
 ;
 ;  AVANT D'IMPORTER :
 ;    Remplacez  C:\\CAD  par le dossier reel qui contient le .vbs. Les
-;    chemins pointent vers le sous-dossier « Application » (ou se trouve
+;    chemins pointent vers le sous-dossier « DATA » (ou se trouve
 ;    convertisseur_cao.py). Chaque antislash doit etre DOUBLE dans un .reg.
 ;
 ;  Remarque : le clic droit Windows n'envoie qu'UN fichier a la fois
@@ -22,63 +22,63 @@ Windows Registry Editor Version 5.00
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.sldprt\shell\ConvertirCAO]
 @="Convertir en STEP + STL"
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.sldprt\shell\ConvertirCAO\command]
-@="py -3 \"C:\\CAD\\Application\\convertisseur_cao.py\" \"%1\""
+@="py -3 \"C:\\CAD\\DATA\\convertisseur_cao.py\" \"%1\""
 
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.sldasm\shell\ConvertirCAO]
 @="Convertir en STEP + STL"
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.sldasm\shell\ConvertirCAO\command]
-@="py -3 \"C:\\CAD\\Application\\convertisseur_cao.py\" \"%1\""
+@="py -3 \"C:\\CAD\\DATA\\convertisseur_cao.py\" \"%1\""
 
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.CATPart\shell\ConvertirCAO]
 @="Convertir en STEP + STL"
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.CATPart\shell\ConvertirCAO\command]
-@="py -3 \"C:\\CAD\\Application\\convertisseur_cao.py\" \"%1\""
+@="py -3 \"C:\\CAD\\DATA\\convertisseur_cao.py\" \"%1\""
 
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.CATProduct\shell\ConvertirCAO]
 @="Convertir en STEP + STL"
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.CATProduct\shell\ConvertirCAO\command]
-@="py -3 \"C:\\CAD\\Application\\convertisseur_cao.py\" \"%1\""
+@="py -3 \"C:\\CAD\\DATA\\convertisseur_cao.py\" \"%1\""
 
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.ipt\shell\ConvertirCAO]
 @="Convertir en STEP + STL"
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.ipt\shell\ConvertirCAO\command]
-@="py -3 \"C:\\CAD\\Application\\convertisseur_cao.py\" \"%1\""
+@="py -3 \"C:\\CAD\\DATA\\convertisseur_cao.py\" \"%1\""
 
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.iam\shell\ConvertirCAO]
 @="Convertir en STEP + STL"
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.iam\shell\ConvertirCAO\command]
-@="py -3 \"C:\\CAD\\Application\\convertisseur_cao.py\" \"%1\""
+@="py -3 \"C:\\CAD\\DATA\\convertisseur_cao.py\" \"%1\""
 
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.prt\shell\ConvertirCAO]
 @="Convertir en STEP + STL"
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.prt\shell\ConvertirCAO\command]
-@="py -3 \"C:\\CAD\\Application\\convertisseur_cao.py\" \"%1\""
+@="py -3 \"C:\\CAD\\DATA\\convertisseur_cao.py\" \"%1\""
 
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.asm\shell\ConvertirCAO]
 @="Convertir en STEP + STL"
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.asm\shell\ConvertirCAO\command]
-@="py -3 \"C:\\CAD\\Application\\convertisseur_cao.py\" \"%1\""
+@="py -3 \"C:\\CAD\\DATA\\convertisseur_cao.py\" \"%1\""
 
 ; ---- Mises en plan -> DWG + DXF ------------------------------------
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.slddrw\shell\ConvertirCAO]
 @="Convertir en DWG + DXF"
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.slddrw\shell\ConvertirCAO\command]
-@="py -3 \"C:\\CAD\\Application\\convertisseur_cao.py\" \"%1\""
+@="py -3 \"C:\\CAD\\DATA\\convertisseur_cao.py\" \"%1\""
 
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.CATDrawing\shell\ConvertirCAO]
 @="Convertir en DWG + DXF"
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.CATDrawing\shell\ConvertirCAO\command]
-@="py -3 \"C:\\CAD\\Application\\convertisseur_cao.py\" \"%1\""
+@="py -3 \"C:\\CAD\\DATA\\convertisseur_cao.py\" \"%1\""
 
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.idw\shell\ConvertirCAO]
 @="Convertir en DWG + DXF"
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.idw\shell\ConvertirCAO\command]
-@="py -3 \"C:\\CAD\\Application\\convertisseur_cao.py\" \"%1\""
+@="py -3 \"C:\\CAD\\DATA\\convertisseur_cao.py\" \"%1\""
 
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.drw\shell\ConvertirCAO]
 @="Convertir en DWG + DXF"
 [HKEY_CLASSES_ROOT\SystemFileAssociations\.drw\shell\ConvertirCAO\command]
-@="py -3 \"C:\\CAD\\Application\\convertisseur_cao.py\" \"%1\""
+@="py -3 \"C:\\CAD\\DATA\\convertisseur_cao.py\" \"%1\""
 
 ; ===================================================================
 ;  DESINSTALLATION

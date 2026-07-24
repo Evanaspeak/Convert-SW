@@ -3,9 +3,9 @@
 '  Lance l'interface graphique SANS aucune fenêtre de commande.
 '  >>> Double-cliquez sur CE fichier pour ouvrir l'application. <<<
 '
-'  Les fichiers de fonctionnement sont dans le sous-dossier « Application ».
+'  Les fichiers de fonctionnement sont dans le sous-dossier « DATA ».
 '  Utilise « pyw » (Python fenêtre, sans console). En cas de souci, lancez
-'  Application\Convertisseur_CAO.bat qui affiche les erreurs éventuelles.
+'  DATA\Convertisseur_CAO.bat qui affiche les erreurs éventuelles.
 ' ===================================================================
 
 Option Explicit
@@ -14,7 +14,7 @@ Set sh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 
 scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
-appDir = fso.BuildPath(scriptDir, "Application")
+appDir = fso.BuildPath(scriptDir, "DATA")
 target = fso.BuildPath(appDir, "convertisseur_gui.py")
 sh.CurrentDirectory = appDir
 
