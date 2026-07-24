@@ -330,28 +330,59 @@ class SolidWorksHandler(Handler):
                 results.append((t, out, False, str(e)))
 
         # Fermer le document converti (l'utilisateur l'a demandé).
-        self._close_doc(doc, title)
+        self._close_doc(doc, title, src)
         return results
 
-    def _close_doc(self, doc, title):
-        # On tente plusieurs formes de titre : SolidWorks attend le titre
-        # exact de la fenêtre pour CloseDoc.
-        names = []
-        if title:
-            names.append(title)
+    def _close_doc(self, doc, title, src):
+        """Ferme le document dans SolidWorks.
+
+        CloseDoc exige le TITRE EXACT de la fenêtre, qui peut inclure ou
+        non l'extension selon la configuration. On essaie donc plusieurs
+        formes, puis on vérifie que le document n'est plus ouvert.
+        """
+        path = ""
         try:
-            gt = doc.GetTitle()
-            if gt and gt not in names:
-                names.append(gt)
+            path = doc.GetPathName() or ""
         except Exception:
             pass
-        for name in names:
+
+        candidates = []
+
+        def add(name):
+            if name and name not in candidates:
+                candidates.append(name)
+
+        add(title)
+        try:
+            add(doc.GetTitle())
+        except Exception:
+            pass
+        if path:
+            base = os.path.basename(path)
+            add(base)
+            add(os.path.splitext(base)[0])
+        add(os.path.basename(src))
+        add(clean_stem(src))
+
+        for name in candidates:
             try:
                 self.app.CloseDoc(name)
-                return True
             except Exception:
                 continue
-        return False
+
+        # Vérification : le document est-il encore ouvert ?
+        if path:
+            for getter in ("GetOpenDocumentByName2", "GetOpenDocumentByName"):
+                try:
+                    still = getattr(self.app, getter)(path)
+                    if still is None:
+                        return True
+                    self.log("    (le document est resté ouvert : %s)"
+                             % os.path.basename(path))
+                    return False
+                except Exception:
+                    continue
+        return True
 
     def stop(self):
         pass

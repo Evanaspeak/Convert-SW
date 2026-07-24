@@ -10,10 +10,13 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
 ----------------------------------------------------------------------
  FICHIERS DU PROJET (à placer ensemble dans un même dossier)
 ----------------------------------------------------------------------
-  Convertisseur_CAO.bat   >>> DOUBLE-CLIC pour ouvrir la fenêtre <<<
+  Convertisseur_CAO.vbs   >>> DOUBLE-CLIC pour ouvrir l'appli (SANS
+                          fenêtre de commande) <<<
+  Convertisseur_CAO.bat   Même chose, mais affiche une console (utile pour
+                          voir une erreur au démarrage).
   convertisseur_gui.py    Interface graphique (fenêtre).
   convertisseur_cao.py    Moteur (routage + pilotage des logiciels).
-  Convertir_ici.bat       Lanceur glisser-déposer (optionnel, sans fenêtre).
+  Convertir_ici.bat       Lanceur glisser-déposer (optionnel).
   menu_contextuel.reg     Entrées de menu clic droit (optionnel).
   LISEZMOI.txt            Ce fichier.
 
@@ -29,8 +32,9 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
 ----------------------------------------------------------------------
  UTILISATION — INTERFACE GRAPHIQUE (recommandé)
 ----------------------------------------------------------------------
-  1. Double-cliquez sur « Convertisseur_CAO.bat ». Un écran d'accueil
-     propose deux outils : « Conversion » et « Renommage » (à venir).
+  1. Double-cliquez sur « Convertisseur_CAO.vbs » (aucune fenêtre de
+     commande n'apparaît). Un écran d'accueil propose deux outils :
+     « Conversion » et « Renommage » (à venir).
      Cliquez « Conversion ». (Le bouton « ‹ Accueil » y ramène.)
   2. « Ajouter des fichiers… » : sélectionnez vos fichiers depuis leur
      emplacement (multi-sélection possible). Ou « Ajouter un dossier… ».
