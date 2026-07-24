@@ -1122,22 +1122,36 @@ def run_cli(paths, dry_run=False):
     return 0 if not failures else 2
 
 
+def _launch_gui(files=None):
+    try:
+        import convertisseur_gui
+        return convertisseur_gui.main(files)
+    except Exception as e:
+        print("Interface graphique indisponible (%s)." % e)
+        print(__doc__)
+        return 1
+
+
 def main(argv):
     args = list(argv[1:])
     if "--help" in args or "-h" in args:
         print(__doc__)
         return 0
+    # conversion sans fenêtre (glisser-déposer « headless », scripts)
+    if "--convert" in args:
+        return run_cli([a for a in args if a != "--convert"], dry_run=False)
+    if "--dry-run" in args:
+        return run_cli([a for a in args if a != "--dry-run"], dry_run=True)
     if not args:
-        try:
-            import convertisseur_gui
-            return convertisseur_gui.main()
-        except Exception as e:
-            print("Interface graphique indisponible (%s)." % e)
-            print(__doc__)
-            return 1
-    dry = "--dry-run" in args
-    args = [a for a in args if a != "--dry-run"]
-    return run_cli(args, dry_run=dry)
+        # aucun argument : fenêtre d'accueil
+        return _launch_gui(None)
+    # des fichiers (ou dossiers) sont fournis : on ouvre la fenêtre de
+    # conversion préchargée avec ces fichiers (glisser-déposer, clic droit).
+    return _launch_gui(collect_files(args))
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
 
 
 if __name__ == "__main__":

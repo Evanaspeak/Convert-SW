@@ -22,14 +22,14 @@ if not exist "%SCRIPT%" (
 
 REM --- Pieces / assemblages -> STEP + STL ---
 for %%E in (.sldprt .sldasm .CATPart .CATProduct .ipt .iam .prt .asm) do (
-    reg add "HKCU\Software\Classes\SystemFileAssociations\%%E\shell\ConvertirCAO" /ve /d "Convertir en STEP + STL" /f >nul
-    reg add "HKCU\Software\Classes\SystemFileAssociations\%%E\shell\ConvertirCAO\command" /ve /d "py -3 \"%SCRIPT%\" \"%%1\"" /f >nul
+    reg add "HKCU\Software\Classes\SystemFileAssociations\%%E\shell\ConvertirCAO" /ve /d "Convertir (Convert-Rename)" /f >nul
+    reg add "HKCU\Software\Classes\SystemFileAssociations\%%E\shell\ConvertirCAO\command" /ve /d "pyw \"%SCRIPT%\" \"%%1\"" /f >nul
 )
 
 REM --- Mises en plan -> DWG + DXF + PDF ---
 for %%E in (.slddrw .CATDrawing .idw .drw) do (
-    reg add "HKCU\Software\Classes\SystemFileAssociations\%%E\shell\ConvertirCAO" /ve /d "Convertir en DWG + DXF + PDF" /f >nul
-    reg add "HKCU\Software\Classes\SystemFileAssociations\%%E\shell\ConvertirCAO\command" /ve /d "py -3 \"%SCRIPT%\" \"%%1\"" /f >nul
+    reg add "HKCU\Software\Classes\SystemFileAssociations\%%E\shell\ConvertirCAO" /ve /d "Convertir (Convert-Rename)" /f >nul
+    reg add "HKCU\Software\Classes\SystemFileAssociations\%%E\shell\ConvertirCAO\command" /ve /d "pyw \"%SCRIPT%\" \"%%1\"" /f >nul
 )
 
 echo.

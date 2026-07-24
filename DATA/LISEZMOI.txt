@@ -22,7 +22,8 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
     Convertir_ici.bat            Lanceur glisser-déposer (optionnel).
     Installer_clic_droit.bat     Ajoute le menu clic droit (optionnel).
     Desinstaller_clic_droit.bat  Retire le menu clic droit.
-    icone.ico                    Icône du raccourci bureau.
+    Compiler_exe.bat             Fabrique un .exe autonome (optionnel).
+    icone.ico                    Icône (raccourci bureau + .exe).
     LISEZMOI.txt                 Ce fichier.
 
   Astuce : depuis l'écran d'accueil de l'appli, le bouton « Créer un
@@ -129,8 +130,12 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
   (Ces lanceurs sont dans le dossier « DATA ».)
 
   Glisser-déposer :
-      Glissez vos fichiers sur « DATA\Convertir_ici.bat » (exporte
-      tous les formats par défaut, à côté des fichiers).
+      Glissez vos fichiers directement sur « Convertisseur_CAO.vbs » (ou
+      sur « DATA\Convertir_ici.bat ») : la fenêtre de conversion s'ouvre
+      DÉJÀ PRÉCHARGÉE avec ces fichiers.
+
+  Conversion « headless » (sans fenêtre, tous formats par défaut) :
+      py -3 convertisseur_cao.py --convert fichier.sldprt dossier\ ...
 
   Ligne de commande (depuis le dossier « DATA ») :
       py -3 convertisseur_cao.py fichier.sldprt dossier\ ...
@@ -141,8 +146,30 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
   Clic droit (un fichier à la fois) :
       Double-cliquez « DATA\Installer_clic_droit.bat » (aucun chemin à
       modifier, aucun droit administrateur requis). Ensuite, un clic droit
-      sur un fichier CAO propose « Convertir... ». Pour retirer l'entrée :
+      sur un fichier CAO propose « Convertir (Convert-Rename) » : la
+      fenêtre s'ouvre préchargée avec ce fichier. Pour retirer l'entrée :
       « Desinstaller_clic_droit.bat ».
+
+----------------------------------------------------------------------
+ VERSION .EXE  (distribution clé en main, optionnel)
+----------------------------------------------------------------------
+  Pour distribuer l'appli à des collègues SANS qu'ils installent Python
+  ni pywin32 (le logiciel CAO reste requis) :
+
+    1. Sur une machine Windows avec Python, double-cliquez
+       « DATA\Compiler_exe.bat ». Il installe PyInstaller au besoin, puis
+       compile (1 à 2 min).
+    2. Récupérez l'exécutable : DATA\dist\Convert-Rename.exe
+    3. Distribuez ce seul .exe. Double-clic = fenêtre d'accueil ;
+       glisser-déposer de fichiers dessus = conversion préchargée. Le
+       bouton « raccourci bureau » fonctionne aussi depuis l'exe.
+
+  Notes :
+    - Un .exe non signé peut déclencher SmartScreen (« Informations
+      complémentaires » -> « Exécuter quand même »).
+    - Selon la version de pywin32, un « hidden import » supplémentaire
+      peut être nécessaire : relancez la compilation en l'ajoutant dans
+      Compiler_exe.bat (le message d'erreur indique lequel).
 
 ----------------------------------------------------------------------
  CORRESPONDANCES FICHIERS -> LOGICIELS

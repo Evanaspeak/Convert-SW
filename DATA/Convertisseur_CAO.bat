@@ -1,22 +1,14 @@
 @echo off
 REM ===================================================================
 REM  Convertisseur_CAO.bat
-REM  Ouvre l'interface graphique du convertisseur (double-clic).
-REM  Aucune ligne de commande a taper.
+REM  Ouvre l'application AVEC une console visible (utile pour voir une
+REM  erreur de demarrage). Pour un lancement propre sans console, utilisez
+REM  Convertisseur_CAO.vbs a la racine.
 REM ===================================================================
 cd /d "%~dp0"
 
-REM pyw / pythonw = Python "fenetre" (sans console noire).
-where pyw >nul 2>nul
-if %errorlevel%==0 (
-    start "" pyw convertisseur_gui.py
-    goto :eof
-)
-where pythonw >nul 2>nul
-if %errorlevel%==0 (
-    start "" pythonw convertisseur_gui.py
-    goto :eof
-)
+py -3 convertisseur_cao.py %*
 
-REM Repli : Python normal (une console s'ouvrira, utile pour voir une erreur).
-py -3 convertisseur_gui.py
+echo.
+echo (Fenetre laissee ouverte. Fermez-la quand vous avez fini.)
+pause

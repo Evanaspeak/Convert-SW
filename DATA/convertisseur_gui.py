@@ -49,29 +49,36 @@ def create_desktop_shortcut():
     Le raccourci vise le lanceur .vbs (ouverture sans console). Renvoie le
     chemin du raccourci créé. Lève une exception en cas d'échec.
     """
+    import sys
     import win32com.client  # pywin32
     shell = win32com.client.Dispatch("WScript.Shell")
     desktop = shell.SpecialFolders("Desktop")
-    root = _app_root()
-
-    here = os.path.dirname(os.path.abspath(__file__))
-    vbs = os.path.join(root, "Convertisseur_CAO.vbs")
     lnk = os.path.join(desktop, "Convert-Rename.lnk")
     sc = shell.CreateShortcut(lnk)
-    if os.path.exists(vbs):
-        # cibler wscript.exe + le .vbs : le plus fiable (pas d'ambiguïté)
-        windir = os.environ.get("WINDIR", r"C:\Windows")
-        sc.TargetPath = os.path.join(windir, "System32", "wscript.exe")
-        sc.Arguments = '"%s"' % vbs
+
+    if getattr(sys, "frozen", False):
+        # version .exe : le raccourci vise directement l'exécutable
+        # (icône déjà intégrée dans l'exe).
+        exe = sys.executable
+        sc.TargetPath = exe
+        sc.WorkingDirectory = os.path.dirname(exe)
+        sc.IconLocation = "%s,0" % exe
     else:
-        # repli : lanceur .bat dans le dossier DATA
-        sc.TargetPath = os.path.join(here, "Convertisseur_CAO.bat")
-    sc.WorkingDirectory = root
+        # version scripts : viser le lanceur .vbs (ouverture sans console)
+        root = _app_root()
+        here = os.path.dirname(os.path.abspath(__file__))
+        vbs = os.path.join(root, "Convertisseur_CAO.vbs")
+        if os.path.exists(vbs):
+            windir = os.environ.get("WINDIR", r"C:\Windows")
+            sc.TargetPath = os.path.join(windir, "System32", "wscript.exe")
+            sc.Arguments = '"%s"' % vbs
+        else:
+            sc.TargetPath = os.path.join(here, "Convertisseur_CAO.bat")
+        sc.WorkingDirectory = root
+        ico = os.path.join(here, "icone.ico")
+        if os.path.exists(ico):
+            sc.IconLocation = "%s,0" % ico
     sc.Description = "Convert / Rename — CAO/DAO"
-    # icône personnalisée si présente
-    ico = os.path.join(here, "icone.ico")
-    if os.path.exists(ico):
-        sc.IconLocation = "%s,0" % ico
     sc.Save()
     return lnk
 
@@ -90,7 +97,7 @@ def _fmt_duration(seconds):
 
 
 class App(ttk.Frame):
-    def __init__(self, master, controller=None):
+    def __init__(self, master, controller=None, initial_files=None):
         super().__init__(master, padding=10)
         self.master = master
         self.controller = controller
@@ -112,6 +119,8 @@ class App(ttk.Frame):
 
         self._build()
         self._poll_queue()
+        if initial_files:
+            self._add_paths(initial_files)
         self._refresh_state()
 
     # ------------------------------------------------------------------ UI
@@ -1046,9 +1055,14 @@ class Controller(object):
     """Aiguille entre l'accueil, la conversion et le renommage."""
     GEOMETRY = {"home": "560x360", "conversion": "820x820", "rename": "900x680"}
 
-    def __init__(self, root):
+    def __init__(self, root, initial_files=None):
         self.root = root
-        self.show_home()
+        if initial_files:
+            # démarrage avec des fichiers (glisser-déposer / clic droit) :
+            # on ouvre directement l'écran de conversion, préchargé.
+            self.show_conversion(preload=initial_files)
+        else:
+            self.show_home()
 
     def _clear(self):
         for w in self.root.winfo_children():
@@ -1059,10 +1073,10 @@ class Controller(object):
         self.root.geometry(self.GEOMETRY["home"])
         HomeFrame(self.root, self)
 
-    def show_conversion(self):
+    def show_conversion(self, preload=None):
         self._clear()
         self.root.geometry(self.GEOMETRY["conversion"])
-        App(self.root, controller=self)
+        App(self.root, controller=self, initial_files=preload)
 
     def show_rename(self):
         self._clear()
@@ -1070,14 +1084,14 @@ class Controller(object):
         RenameFrame(self.root, self)
 
 
-def main():
+def main(initial_files=None):
     root = tk.Tk()
     root.title("Outils CAO/DAO")
     try:
         ttk.Style().theme_use("vista")
     except tk.TclError:
         pass
-    Controller(root)
+    Controller(root, initial_files=initial_files)
     root.mainloop()
     return 0
 

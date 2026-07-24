@@ -2,3 +2,8 @@ __pycache__/
 *.pyc
 Export/
 conversion.log
+
+# Artefacts de compilation PyInstaller
+build/
+dist/
+*.spec
