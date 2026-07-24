@@ -54,6 +54,11 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
        - Texte par catégorie : un texte propre ajouté aux Pièces, aux
          Assemblages et aux Mises en plan (ex. PC, ENS, PL), plaçable au
          début ou à la fin du nom (Position).
+       - Nom commun : s'il est renseigné, il REMPLACE entièrement le nom
+         d'origine (renommage complet). Avec une numérotation, des pièces
+         de noms très différents deviennent p. ex. carter_001, carter_002…
+         Sans numérotation, tous les fichiers auraient le même nom : un
+         avertissement s'affiche (risque d'écrasement).
        Un aperçu s'affiche en direct.
   5. Destination :
        - « À côté de chaque fichier » : un sous-dossier « Export » est
@@ -81,6 +86,10 @@ pilotant les logiciels de CAO déjà installés via leur automation COM
          « supprimer » = retirer le texte trouvé. Case « respecter la
          casse » globale.
        - Préfixe / suffixe ;
+       - Nom commun : remplace entièrement le nom d'origine. Combiné à la
+         numérotation « Ajouter », renomme tout un lot en nom_001,
+         nom_002… (sans numéro, l'aperçu signale les doublons en rouge et
+         bloque l'application).
        - Casse (MAJUSCULES / minuscules / Première lettre), espaces -> _,
          retrait des accents. Le nettoyage s'applique à TOUT le nom,
          préfixe et suffixe compris.

@@ -142,11 +142,13 @@ class ExportOptions(object):
     def __init__(self, dest_dir=None, subfolders=False, prefix="", suffix="",
                  number_mode="none", number_start=1, number_digits=3,
                  number_position="suffix", number_sep="_", category_text=None,
-                 category_position="prefix"):
+                 category_position="prefix", base_name=""):
         self.dest_dir = dest_dir or None
         self.subfolders = bool(subfolders)
         self.prefix = sanitize_affix(prefix)
         self.suffix = sanitize_affix(suffix)
+        # nom commun : s'il est renseigné, il REMPLACE le nom d'origine
+        self.base_name = sanitize_affix(base_name)
         # numérotation : "none" | "global" | "per_type"
         self.number_mode = number_mode if number_mode in ("none", "global", "per_type") else "none"
         try:
@@ -174,6 +176,8 @@ def build_output_stem(stem, kind, idx, opts):
     idx : rang pour la numérotation (0,1,2…) ou None si pas de numéro.
     Assemblage : préfixe + texte_catégorie + [num] + nom + [num] + suffixe.
     """
+    if opts.base_name:
+        stem = opts.base_name
     num = ""
     if idx is not None and opts.number_mode in ("global", "per_type"):
         num = str(opts.number_start + idx).zfill(opts.number_digits)
@@ -890,8 +894,10 @@ class RenameRules(object):
                  prefix="", suffix="", case_mode="none",
                  spaces_to_underscore=False, remove_accents=False,
                  number_mode="none", number_start=1, number_digits=3,
-                 number_position="suffix", number_sep="_"):
+                 number_position="suffix", number_sep="_", base_name=""):
         self.replacements = list(replacements or [])
+        # nom commun : s'il est renseigné, il REMPLACE le nom d'origine
+        self.base_name = base_name or ""
         self.case_sensitive = bool(case_sensitive)
         self.prefix = prefix or ""
         self.suffix = suffix or ""
@@ -914,29 +920,34 @@ class RenameRules(object):
 
 def apply_rules(stem, index, rules):
     """Transforme un nom (sans extension) selon les règles. index = 0,1,2…"""
-    s = stem
+    # nom commun : remplace entièrement le nom d'origine ; on ignore alors
+    # rechercher/remplacer, suppression de numéro et casse (sans objet).
+    if rules.base_name:
+        s = rules.base_name
+    else:
+        s = stem
 
-    # 1) rechercher / remplacer (plusieurs règles, dans l'ordre)
-    for find, replace in rules.replacements:
-        if not find:
-            continue
-        if rules.case_sensitive:
-            s = s.replace(find, replace)
-        else:
-            s = re.sub(re.escape(find), lambda _m, r=replace: r,
-                       s, flags=re.IGNORECASE)
+        # 1) rechercher / remplacer (plusieurs règles, dans l'ordre)
+        for find, replace in rules.replacements:
+            if not find:
+                continue
+            if rules.case_sensitive:
+                s = s.replace(find, replace)
+            else:
+                s = re.sub(re.escape(find), lambda _m, r=replace: r,
+                           s, flags=re.IGNORECASE)
 
-    # 2) suppression d'une numérotation existante (uniquement la suite)
-    if rules.number_mode == "remove":
-        s = strip_sequence(s, rules.number_position)
+        # 2) suppression d'une numérotation existante (uniquement la suite)
+        if rules.number_mode == "remove":
+            s = strip_sequence(s, rules.number_position)
 
-    # 3) casse (sur le nom d'origine, pas sur le préfixe/suffixe)
-    if rules.case_mode == "upper":
-        s = s.upper()
-    elif rules.case_mode == "lower":
-        s = s.lower()
-    elif rules.case_mode == "capitalize":
-        s = s.capitalize()
+        # 3) casse (sur le nom d'origine, pas sur le préfixe/suffixe)
+        if rules.case_mode == "upper":
+            s = s.upper()
+        elif rules.case_mode == "lower":
+            s = s.lower()
+        elif rules.case_mode == "capitalize":
+            s = s.capitalize()
 
     # 4) assemblage : une numérotation AJOUTÉE se place À L'INTÉRIEUR, juste
     #    après le préfixe ou juste avant le suffixe (jamais au-delà).

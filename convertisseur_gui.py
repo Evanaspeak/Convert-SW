@@ -156,11 +156,21 @@ class App(ttk.Frame):
         ttk.Entry(naming, textvariable=self.suffix_var, width=16).grid(
             row=0, column=3, sticky="ew", padx=(4, 0))
 
+        # nom commun (remplace le nom d'origine)
+        ttk.Label(naming, text="Nom commun :").grid(row=1, column=0, sticky="w",
+                                                    pady=(4, 0))
+        self.base_name_var = _t()
+        ttk.Entry(naming, textvariable=self.base_name_var).grid(
+            row=1, column=1, columnspan=2, sticky="ew", padx=(4, 10), pady=(4, 0))
+        ttk.Label(naming, text="(vide = garder les noms ; sinon renomme tout,"
+                              " ajoutez une numérotation)",
+                  foreground="#777").grid(row=1, column=3, sticky="w", pady=(4, 0))
+
         # numérotation
         ttk.Separator(naming, orient="horizontal").grid(
-            row=1, column=0, columnspan=4, sticky="ew", pady=6)
+            row=2, column=0, columnspan=4, sticky="ew", pady=6)
         numrow = ttk.Frame(naming)
-        numrow.grid(row=2, column=0, columnspan=4, sticky="ew")
+        numrow.grid(row=3, column=0, columnspan=4, sticky="ew")
         ttk.Label(numrow, text="Numérotation :").pack(side="left")
         self.number_mode_var = tk.StringVar(value="none")
         self.number_mode_var.trace_add(
@@ -186,7 +196,7 @@ class App(ttk.Frame):
 
         # texte propre à chaque catégorie
         self.cat_frame = ttk.Frame(naming)
-        self.cat_frame.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(6, 0))
+        self.cat_frame.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(6, 0))
         ttk.Label(self.cat_frame, text="Texte par catégorie :").grid(
             row=0, column=0, sticky="w")
         self.cat_vars = {}
@@ -208,7 +218,7 @@ class App(ttk.Frame):
                      values=["début", "fin"]).grid(row=0, column=col + 1, sticky="w")
 
         self.naming_preview = ttk.Label(naming, text="", foreground="#555")
-        self.naming_preview.grid(row=4, column=0, columnspan=4, sticky="w",
+        self.naming_preview.grid(row=5, column=0, columnspan=4, sticky="w",
                                  pady=(6, 0))
         r += 1
 
@@ -372,7 +382,8 @@ class App(ttk.Frame):
             number_mode=self.number_mode_var.get(),
             number_start=self.number_start_var.get(),
             number_digits=self.number_digits_var.get(),
-            number_position=pos, category_text=cat, category_position=cat_pos)
+            number_position=pos, category_text=cat, category_position=cat_pos,
+            base_name=self.base_name_var.get())
 
     def _update_naming_preview(self):
         opts = self._export_opts()
@@ -436,6 +447,17 @@ class App(ttk.Frame):
             if not dest_dir:
                 messagebox.showwarning("Destination",
                                        "Indiquez un dossier de destination.")
+                return
+
+        # nom commun sans numérotation + plusieurs fichiers -> écrasements
+        if self.base_name_var.get().strip() and self.number_mode_var.get() == "none" \
+                and len(self.files) > 1:
+            if not messagebox.askyesno(
+                    "Nom commun sans numérotation",
+                    "Un nom commun est défini mais la numérotation est "
+                    "désactivée : tous les fichiers auraient le même nom et "
+                    "s'écraseraient.\nActivez une numérotation.\n\nContinuer "
+                    "quand même ?"):
                 return
 
         subfolders = len(self._distinct_selected_formats()) > 1
@@ -683,7 +705,7 @@ class RenameFrame(ttk.Frame):
         for c in range(3):
             row2.columnconfigure(c, weight=1)
 
-        ps = ttk.LabelFrame(row2, text="Préfixe / suffixe", padding=8)
+        ps = ttk.LabelFrame(row2, text="Préfixe / suffixe / nom commun", padding=8)
         ps.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
         ps.columnconfigure(1, weight=1)
         ttk.Label(ps, text="Préfixe :").grid(row=0, column=0, sticky="w")
@@ -692,6 +714,11 @@ class RenameFrame(ttk.Frame):
         ttk.Label(ps, text="Suffixe :").grid(row=1, column=0, sticky="w")
         self.suffix_var = self._var("str", "")
         ttk.Entry(ps, textvariable=self.suffix_var).grid(row=1, column=1, sticky="ew")
+        ttk.Label(ps, text="Nom commun :").grid(row=2, column=0, sticky="w")
+        self.base_name_var = self._var("str", "")
+        ttk.Entry(ps, textvariable=self.base_name_var).grid(row=2, column=1, sticky="ew")
+        ttk.Label(ps, text="(remplace tout le nom ; ajoutez une numérotation)",
+                  foreground="#777").grid(row=3, column=0, columnspan=2, sticky="w")
 
         cc = ttk.LabelFrame(row2, text="Casse / nettoyage", padding=8)
         cc.grid(row=0, column=1, sticky="nsew", padx=4)
@@ -886,6 +913,7 @@ class RenameFrame(ttk.Frame):
             replacements=replacements,
             case_sensitive=self.case_sensitive_var.get(),
             prefix=self.prefix_var.get(), suffix=self.suffix_var.get(),
+            base_name=self.base_name_var.get(),
             case_mode=case_mode,
             spaces_to_underscore=self.spaces_var.get(),
             remove_accents=self.accents_var.get(),
