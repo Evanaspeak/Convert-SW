@@ -303,12 +303,34 @@ class SolidWorksHandler(Handler):
     _SAVE_SILENT_COPY = 1 | 2                              # Silent | Copy
     PART_EXT = "sldprt"   # cible "part" : assemblage -> fichier pièce
 
+    # swFileSaveError_e (masque de bits) -> messages lisibles
+    _SAVE_ERRORS = [
+        (1, "erreur générique"),
+        (2, "fichier en lecture seule"),
+        (4, "nom de fichier vide"),
+        (16, "fichier verrouillé"),
+        (32, "format non disponible (module ou licence d'export)"),
+        (256, "extension non valide"),
+        (4096, "export non pris en charge pour ce document"),
+    ]
+
     def start(self):
         import win32com.client
         self.app = win32com.client.Dispatch("SldWorks.Application")
         self.app.Visible = True
         self._open_mode = None
-        self._save_mode = None
+        self._save_mode = {}   # meilleure méthode d'export, par extension
+
+    @classmethod
+    def _decode_save_errors(cls, code):
+        try:
+            code = int(code)
+        except (TypeError, ValueError):
+            return ""
+        if not code:
+            return ""
+        names = [label for bit, label in cls._SAVE_ERRORS if code & bit]
+        return "%s (code SolidWorks %d)" % (", ".join(names) or "erreur inconnue", code)
 
     def _open(self, src, ext):
         import pythoncom
@@ -348,43 +370,68 @@ class SolidWorksHandler(Handler):
         raise RuntimeError("SolidWorks n'a pas pu ouvrir le fichier (doc None).")
 
     def _save(self, doc, outpath):
-        import pythoncom
+        """Enregistre une copie du document au format déduit de l'extension.
+
+        Renvoie (ok, message). Seul un fichier réellement écrit fait foi :
+        SolidWorks peut « réussir » l'appel sans rien produire (fréquent en
+        STL). Dans ce cas on essaie la méthode suivante, et on garde le
+        détail (code d'erreur SolidWorks) pour le bilan.
+        """
         ver, opt = self._VER_CURRENT, self._SAVE_SILENT_COPY
-        ext = doc.Extension
+        fmt = os.path.splitext(outpath)[1].lower()
 
-        def m_ext_saveas():
-            errs, warns = _byref_long(), _byref_long()
-            return ext.SaveAs(outpath, ver, opt, None, errs, warns)
-
-        def m_ext_saveas3():
-            errs, warns = _byref_long(), _byref_long()
-            return ext.SaveAs3(outpath, ver, opt, None, None, errs, warns)
-
-        def m_doc_saveas4():
-            errs, warns = _byref_long(), _byref_long()
-            return doc.SaveAs4(outpath, ver, opt, errs, warns)
-
-        def m_doc_saveas3():
-            return doc.SaveAs3(outpath, ver, opt)
-
-        modes = [("Ext.SaveAs", m_ext_saveas),
-                 ("Ext.SaveAs3", m_ext_saveas3),
-                 ("Doc.SaveAs4", m_doc_saveas4),
-                 ("Doc.SaveAs3", m_doc_saveas3)]
-        if self._save_mode:
-            modes.sort(key=lambda kv: kv[0] != self._save_mode)
-
-        last_err = None
-        for label, fn in modes:
+        # Un export précédent encore ouvert ailleurs (visualiseur, slicer…)
+        # empêche SolidWorks de l'écraser : on le signale clairement.
+        before = None
+        if os.path.exists(outpath):
             try:
-                fn()
-                self._save_mode = label
-                return True
-            except pythoncom.com_error as e:
-                last_err = e
-        if last_err:
-            raise last_err
-        return False
+                with open(outpath, "ab"):
+                    pass
+            except OSError:
+                return False, ("le fichier %s existe déjà et est ouvert dans un "
+                               "autre programme (ou en lecture seule) : fermez-le "
+                               "puis relancez" % os.path.basename(outpath))
+            before = os.path.getmtime(outpath)
+
+        def written():
+            if not os.path.exists(outpath):
+                return False
+            return before is None or os.path.getmtime(outpath) != before
+
+        def with_codes(call):
+            errs, warns = _byref_long(), _byref_long()
+            call(errs, warns)
+            return errs.value
+
+        ext = doc.Extension
+        methods = [
+            ("Ext.SaveAs", lambda: with_codes(
+                lambda e, w: ext.SaveAs(outpath, ver, opt, None, e, w))),
+            ("Ext.SaveAs3", lambda: with_codes(
+                lambda e, w: ext.SaveAs3(outpath, ver, opt, None, None, e, w))),
+            ("Doc.SaveAs4", lambda: with_codes(
+                lambda e, w: doc.SaveAs4(outpath, ver, opt, e, w))),
+            ("Doc.SaveAs3", lambda: (doc.SaveAs3(outpath, ver, opt), 0)[1]),
+            ("Doc.SaveAs2", lambda: (doc.SaveAs2(outpath, ver, True, True), 0)[1]),
+        ]
+        best = self._save_mode.get(fmt)
+        if best:
+            methods.sort(key=lambda m: m[0] != best)
+
+        reasons = []
+        for label, call in methods:
+            try:
+                errs = call()
+            except Exception as e:
+                reasons.append("%s : %s" % (label, e))
+                continue
+            if written():
+                self._save_mode[fmt] = label
+                return True, ""
+            detail = self._decode_save_errors(errs)
+            reasons.append("%s : aucun fichier écrit%s"
+                           % (label, (" — " + detail) if detail else ""))
+        return False, " | ".join(reasons) or "échec de l'enregistrement"
 
     def convert(self, src, targets, opts):
         results = []
@@ -402,12 +449,20 @@ class SolidWorksHandler(Handler):
         except Exception:
             pass
 
+        # Rendre le document actif : certains exports (STL notamment, qui
+        # recalcule un maillage) échouent sur un document non actif.
+        if title:
+            try:
+                self.app.ActivateDoc3(title, False, 0, _byref_long())
+            except Exception:
+                pass
+
         for t in targets:
             ext_out = self.PART_EXT if t == "part" else t
             out = output_path(src, t, opts, ext=ext_out)
             try:
-                ok = self._save(doc, out) and os.path.exists(out)
-                results.append((t, out, ok, "" if ok else "SaveAs a échoué"))
+                ok, msg = self._save(doc, out)
+                results.append((t, out, ok, msg))
             except Exception as e:
                 results.append((t, out, False, str(e)))
 
