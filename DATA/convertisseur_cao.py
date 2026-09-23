@@ -311,8 +311,10 @@ class SolidWorksHandler(Handler):
         (16, "fichier verrouillé"),
         (32, "format non disponible (module ou licence d'export)"),
         (256, "extension non valide"),
+        (2048, "chemin trop long"),
         (4096, "export non pris en charge pour ce document"),
     ]
+    _MAX_PATH = 259   # limite Windows classique (MAX_PATH - 1)
 
     def start(self):
         import win32com.client
@@ -379,6 +381,14 @@ class SolidWorksHandler(Handler):
         """
         ver, opt = self._VER_CURRENT, self._SAVE_SILENT_COPY
         fmt = os.path.splitext(outpath)[1].lower()
+
+        # SolidWorks refuse d'écrire au-delà de la limite de chemin Windows
+        # (fréquent dans les dossiers OneDrive/SharePoint très imbriqués).
+        if len(os.path.abspath(outpath)) > self._MAX_PATH:
+            return False, ("chemin de sortie trop long (%d caractères, max %d) : "
+                           "choisissez un « Dossier personnalisé » plus court "
+                           "(ex. C:\\Export) ou raccourcissez le nom"
+                           % (len(os.path.abspath(outpath)), self._MAX_PATH))
 
         # Un export précédent encore ouvert ailleurs (visualiseur, slicer…)
         # empêche SolidWorks de l'écraser : on le signale clairement.
