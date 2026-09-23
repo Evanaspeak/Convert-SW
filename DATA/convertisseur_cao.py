@@ -300,6 +300,7 @@ class SolidWorksHandler(Handler):
     _DOCTYPE = {".sldprt": 1, ".sldasm": 2, ".slddrw": 3}  # swDocumentTypes_e
     _SILENT_OPEN = 1                                        # swOpenDocOptions_Silent
     _VER_CURRENT = 0                                        # swSaveAsCurrentVersion
+    _SAVE_SILENT = 1                                        # swSaveAsOptions_Silent
     _SAVE_SILENT_COPY = 1 | 2                              # Silent | Copy
     PART_EXT = "sldprt"   # cible "part" : assemblage -> fichier pièce
 
@@ -423,6 +424,10 @@ class SolidWorksHandler(Handler):
                 lambda e, w: doc.SaveAs4(outpath, ver, opt, e, w))),
             ("Doc.SaveAs3", lambda: (doc.SaveAs3(outpath, ver, opt), 0)[1]),
             ("Doc.SaveAs2", lambda: (doc.SaveAs2(outpath, ver, True, True), 0)[1]),
+            # Dernier recours : sans l'option « Copie », que certaines
+            # versions de SolidWorks refusent pour les formats maillés (STL).
+            ("Ext.SaveAs (silencieux seul)", lambda: with_codes(
+                lambda e, w: ext.SaveAs(outpath, ver, self._SAVE_SILENT, None, e, w))),
         ]
         best = self._save_mode.get(fmt)
         if best:
